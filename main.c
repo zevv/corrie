@@ -17,8 +17,6 @@
 
 #define BLOCK_SIZE 1024
 #define FFT_SIZE 1024
-#define W 1024
-#define H 512
 #define SRATE 48000
 #define SPEED_OF_SOUND 300.0
 #define MIC_SEP 0.06
@@ -49,6 +47,8 @@ TTF_Font *font;
 
 pa_simple *pa = NULL;
 
+int win_w = 1280;
+int win_h = 720;
 double in[2][FFT_SIZE];
 fftw_complex out[2][FFT_SIZE];
 fftw_complex mul[FFT_SIZE];
@@ -254,37 +254,50 @@ void draw(void)
 	SDL_SetRenderDrawColor(rend, 50, 50, 50, 255);
 	SDL_RenderClear(rend);
 
-	in_box("corr", draw_corr, 0, 0, W, H/2);
-	in_box("wave", draw_scope, 0, H/2, W/2, H/2);
-	in_box("FFT", draw_fft, W/2, H/2, W/2, H/2);
+	in_box("corr", draw_corr, 0, 0, win_w, win_h/2);
+	in_box("wave", draw_scope, 0, win_h/2, win_w/2, win_h/2);
+	in_box("FFT", draw_fft, win_w/2, win_h/2, win_w/2, win_h/2);
 
 	{
 
-		double x = W/2 + peak*100;
+		double x = win_w/2 + peak*100;
 		SDL_SetRenderDrawColor(rend, 255, 0, 255, 255);
-		SDL_RenderDrawLine(rend, x, 0, x, H/2);
+		SDL_RenderDrawLine(rend, x, 0, x, win_h/2);
 		x ++;
-		SDL_RenderDrawLine(rend, x, 0, x, H/2);
+		SDL_RenderDrawLine(rend, x, 0, x, win_h/2);
 	}
-	
-	SDL_SetRenderDrawColor(rend, 0, 255, 0, 0);
 
 	SDL_RenderPresent(rend);
 	SDL_UpdateWindowSurface(win);
 }
 
 
+void events(void)
+{
+	SDL_Event e;
+	while(SDL_PollEvent(&e)) {
+		if(e.type == SDL_QUIT) exit(0);
+		if(e.type == SDL_WINDOWEVENT) {
+			if (e.window.event == SDL_WINDOWEVENT_RESIZED) {
+				 win_w = e.window.data1;
+				 win_h = e.window.data2;
+			}
+		}
+
+	}
+}
+
 int main(int argc, char **argv)
 {
 	SDL_Init(SDL_INIT_VIDEO);
 	win = SDL_CreateWindow("corrie",
 		SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-		W, H,
-		SDL_WINDOW_SHOWN );
+		win_w, win_h,
+		SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
 	rend = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED);
 
 	TTF_Init();
-	font = TTF_OpenFont("VeraMono.ttf", 13);
+	font = TTF_OpenFont("font.ttf", 13);
 	assert(font);
 
 	int error;
@@ -297,6 +310,7 @@ int main(int argc, char **argv)
 		rec();
 		calc();
 		draw();
+		events();
 
 	}
 
