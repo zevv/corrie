@@ -15,13 +15,15 @@
 #include <pulse/simple.h>
 #include <pulse/error.h>
 
-#define BLOCK_SIZE 1024
+#include "biquad.h"
+
+#define BLOCK_SIZE 512
 #define FFT_SIZE 1024
 #define SRATE 48000
 #define SPEED_OF_SOUND 300.0
 #define MIC_SEP 0.06
 #define F_MAX (SRATE*0.5)
-#define F_LOW_CUT 100
+#define F_LOW_CUT 80
 #define F_HIGH_CUT (SPEED_OF_SOUND / MIC_SEP)
 //#define F_HIGH_CUT F_MAX
 	
@@ -56,6 +58,7 @@ double corr[FFT_SIZE];
 double corr_avg[FFT_SIZE];
 double hamming[FFT_SIZE];
 double peak;
+struct biquad lp[2];
 
 fftw_plan plan0, plan1, plan2;
 
@@ -68,11 +71,17 @@ void init(void)
 	float a1 = 1 - a0;
 	for(int i=0; i<BLOCK_SIZE; i++) {
 		hamming[i] = a0 - a1 * cos(2*3.141592*i/(BLOCK_SIZE-1));
+		hamming[i] = 1.0;
 	}
 
 	plan0 = fftw_plan_dft_r2c_1d(FFT_SIZE, in[0], out[0], FFTW_ESTIMATE);
 	plan1 = fftw_plan_dft_r2c_1d(FFT_SIZE, in[1], out[1], FFTW_ESTIMATE);
 	plan2 = fftw_plan_dft_c2r_1d(FFT_SIZE, mul, corr, FFTW_ESTIMATE);
+
+	biquad_init(&lp[0], SRATE);
+	biquad_init(&lp[1], SRATE);
+	biquad_config(&lp[0], BIQUAD_TYPE_HP, F_LOW_CUT, 0.7);
+	biquad_config(&lp[1], BIQUAD_TYPE_HP, F_LOW_CUT, 0.7);
 }
 
 
@@ -84,8 +93,8 @@ void rec(void)
 	pa_simple_read(pa, tmp, sizeof(tmp), &error);
 	
 	for(int i=0; i<BLOCK_SIZE; i++) {
-		in[0][i] = tmp[i][0] * hamming[i];
-		in[1][i] = tmp[i][1] * hamming[i];
+		in[0][i] = biquad_run(&lp[0], tmp[i][0]) * hamming[i];
+		in[1][i] = biquad_run(&lp[1], tmp[i][1]) * hamming[i];
 		//in[0][i] = cos(i * 0.2) * hamming[i];
 		//in[1][i] = cos(i * 0.2 + 0.1) * hamming[i];;
 	}
@@ -185,8 +194,35 @@ void in_box(const char *label, void (*fn)(SDL_Rect *r), int x, int y, int w, int
 }
 
 
+void channel_color(int c)
+{
+	if(c == 0) {
+		SDL_SetRenderDrawColor(rend, 183, 0, 255, 232);
+	} else {
+		SDL_SetRenderDrawColor(rend, 0, 255, 183, 232);
+	}
+}
+
+
+void draw_grid(SDL_Rect *r, int xdiv, int ydiv)
+{
+	SDL_SetRenderDrawColor(rend, 255, 255, 255, 32);
+
+	for(int i=0; i<=ydiv; i++) {
+		int y = r->y + r->h * i / ydiv;
+		SDL_RenderDrawLine(rend, r->x, y, r->x+r->w, y);
+	}
+	for(int i=0; i<=xdiv; i++) {
+		int x = r->x + r->w * i / xdiv;
+		SDL_RenderDrawLine(rend, x, r->y, x, r->y + r->h);
+	}
+}
+
+
 void draw_corr(SDL_Rect *r)
 {
+	draw_grid(r, 10, 6);
+
 	SDL_Point point[FFT_SIZE];
 	int range = F_MAX * MIC_SEP / SPEED_OF_SOUND + 1;
 	range = FFT_SIZE/2;
@@ -202,18 +238,10 @@ void draw_corr(SDL_Rect *r)
 }
 
 
-void channel_color(int c)
-{
-	if(c == 0) {
-		SDL_SetRenderDrawColor(rend, 168, 0, 232, 255);
-	} else {
-		SDL_SetRenderDrawColor(rend, 0, 232, 160, 255);
-	}
-}
-
-
 void draw_scope(SDL_Rect *r)
 {
+	draw_grid(r, 10, 4);
+
 	for(int j=0; j<2; j++) {
 		SDL_Point point[BLOCK_SIZE];
 		for(int i=0; i<BLOCK_SIZE; i++) {
@@ -223,13 +251,13 @@ void draw_scope(SDL_Rect *r)
 		channel_color(j);
 		SDL_RenderDrawLines(rend, point, BLOCK_SIZE-1);
 	}
-	
-	SDL_RenderSetClipRect(rend, NULL);
 }
 
 
 void draw_fft(SDL_Rect *r)
 {
+	draw_grid(r, 10, 6);
+
 	SDL_Point point[FFT_SIZE];
 
 	for(int j=0; j<2; j++) {
@@ -253,6 +281,7 @@ void draw(void)
 {
 	SDL_SetRenderDrawColor(rend, 50, 50, 50, 255);
 	SDL_RenderClear(rend);
+	SDL_SetRenderDrawBlendMode(rend, SDL_BLENDMODE_BLEND);
 
 	in_box("corr", draw_corr, 0, 0, win_w, win_h/2);
 	in_box("wave", draw_scope, 0, win_h/2, win_w/2, win_h/2);
