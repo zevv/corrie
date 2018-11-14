@@ -3,6 +3,10 @@
 
 #include <stdbool.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct biquad {
 	float inv_srate;
 	float x1, x2;
@@ -32,5 +36,9 @@ int biquad_config(struct biquad *bq, enum biquad_type type, float freq, float Q)
  */
 
 float biquad_run(struct biquad *bq, float v_in);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

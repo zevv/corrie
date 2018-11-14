@@ -1,8 +1,37 @@
 
-corrie: main.c Makefile
-	gcc -g -Wall -Werror main.c biquad.c -o corrie -lm \
-		`pkg-config --cflags --libs fftw3 sdl2 libpulse-simple sdl2 SDL2_ttf`
+all: corrie corrienim
+
+
+BIN   	= corrie
+SRC 	= main.cpp biquad.c corr.cpp audio.c
+
+PKG	+= fftw3 sdl2 sdl2 SDL2_ttf
+CFLAGS  += -Wall -Werror
+CFLAGS	+= -O3 -MMD
+CFLAGS	+= -g
+CXXFLAGS += -std=c++11
+LDFLAGS += -g
+LIBS	+= -lm
+
+CPPFLAGS += $(shell pkg-config --cflags $(PKG))
+LDFLAGS	+= $(shell pkg-config --libs $(PKG))
+
+CROSS	=
+OBJS    = $(subst .c,.o, $(subst .cpp,.o, $(SRC)))
+DEPS    = $(subst .c,.d, $(SRC))
+CC 	= $(CROSS)gcc
+CXX	= $(CROSS)g++
+LD 	= $(CROSS)g++
+
+$(BIN):	$(OBJS)
+	$(LD) $(LDFLAGS) -o $@ $(OBJS) $(LIBS)
 
 clean:
-	rm corrie
+	rm -f $(OBJS) $(BIN) core
 
+corrienim: c
+	
+c: $(wildcard *.nim) Makefile
+	nim c -d:debug --debugger:native c.nim
+
+-include $(DEPS)
