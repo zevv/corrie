@@ -180,6 +180,9 @@ method draw(w: WidgetFFT, app: App, buf: AudioBuffer) =
   if w.winType == Gaussian or w.winType == Cauchy:
     if w.gui.slider(4, "beta", w.winAdj, 0.1, 40.0):
       w.setWindowType(w.winType)
+    
+  discard w.gui.slider(5, "beta", w.db_top, -200, 20.0)
+  echo w.db_top
 
 
 method handleMouse*(w: WidgetFFT, x, y: int): bool =
