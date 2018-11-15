@@ -85,8 +85,6 @@ proc newWidgetFFT*(app: App): WidgetFFT =
 var ss  = 1.0
 
 
-method label(w: WidgetFFT): string =
-  return "FFT " & $w.fftSize & " " & $w.winType & "/" & formatFloat(w.winAdj, precision=2)
  
 method draw(w: WidgetFFT, app: App, buf: AudioBuffer) =
 
@@ -174,18 +172,20 @@ method draw(w: WidgetFFT, app: App, buf: AudioBuffer) =
 
   # Gui
 
-  w.gui.start(210, 10)
+  w.gui.start(100, 0)
   w.gui.start(PackHor)
-  if w.gui.button(1, "Click me"): echo "click"
   discard w.gui.button(2, "Enable", w.enable)
+  w.gui.label(10, "FFT " & $w.fftSize & " " & $w.winType & "/" & formatFloat(w.winAdj, precision=2))
   w.gui.stop()
-  if w.gui.select(3, "Window", addr w.winType):
-    w.setWindowType(w.winType)
-  
-  if w.winType == Gaussian or w.winType == Cauchy:
-    w.gui.start()
-    if w.gui.slider(4, "beta", w.winAdj, 0.1, 40.0):
+  if w.enable:
+    w.gui.start(PackVer)
+    if w.gui.button(1, "Click me"):
+      echo "click"
+    if w.gui.select(3, "Window", addr w.winType):
       w.setWindowType(w.winType)
+    if w.winType == Gaussian or w.winType == Cauchy:
+      if w.gui.slider(4, "beta", w.winAdj, 0.1, 40.0):
+        w.setWindowType(w.winType)
     w.gui.stop()
   w.gui.stop()
 

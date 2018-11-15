@@ -6,11 +6,25 @@ import typetraits
 
 const DEF_MARGIN = 5
 const DEF_PADDING = 4
+const DEFER = true
 
 type
 
   PackDir* = enum
     PackHor, PackVer
+
+  RenderKind = enum
+    RenderDrawRect, RenderFillRect, RenderDrawTex
+
+  RenderCmd = ref object
+    rect: Rect
+    case kind: RenderKind
+      of RenderDrawRect:
+        drawColor: Color
+      of RenderFillRect:
+        fillColor: Color
+      of RenderDrawTex:
+        tex: Texture
 
   Box = ref object
     x, y: int
@@ -26,19 +40,22 @@ type
     textCache: TextCache
     rend: Renderer
     mx, my, mb: int
-    colFg, colBg, colBgAct, colText, colHot, colBound: Color
+    colFg, colBg, colItem, colItemAct, colText, colHot, colBound: Color
     box: Box
     boxStack: seq[Box]
+    renderCmds: seq[RenderCmd]
 
 
 proc newGui*(rend: Renderer, textCache: TextCache): Gui =
   let g = Gui(rend: rend, textCache: textCache)
   g.colFg = Color(r: 150, g:120, b: 50, a:255)
-  g.colBg = Color(r:30, g:50, b:100, a:255)
-  g.colBgAct = Color(r:80, g:140, b:140, a:255)
+  g.colBg = Color(r:30, g:30, b:40, a:255)
+  g.colItem = Color(r:30, g:50, b:100, a:255)
+  g.colItemAct = Color(r:80, g:140, b:140, a:255)
   g.colText = Color(r:255, g:255, b:255, a:255)
   g.colHot = Color(r:255, g:0, b:0, a:255)
   g.colBound = Color(r:0, g:255, b:0, a:255)
+  g.debug = false
   return g
 
 proc updatePos(g: Gui, dx, dy: int) =
@@ -47,24 +64,16 @@ proc updatePos(g: Gui, dx, dy: int) =
   else:
     g.box.y = g.box.y + dy + g.box.margin
 
-proc start*(g: Gui, x, y: int, packDir: PackDir = PackVer, margin: int = DEF_MARGIN) =
-  g.box = Box(x: x, y: y, padding: DEF_PADDING, margin: margin, packDir: packDir)
-  g.box.rect = Rect(x: x, y: y, w: 0, h: 0)
-  g.boxStack.add(g.box)
-
-proc start*(g: Gui, packDir: PackDir = PackVer, margin: int = DEF_MARGIN) =
-  g.start(g.box.x, g.box.y, packDir, margin)
 
 proc drawRect(g: Gui, r: var Rect, c: Color) =
-  discard g.rend.setRenderDrawColor(c)
-  discard g.rend.renderDrawRect(addr r)
+  g.renderCmds.add(RenderCmd(kind: RenderDrawRect, rect: r, drawColor: c))
+  return
 
 proc fillRect(g: Gui, r: var Rect, c: Color) =
-  discard g.rend.setRenderDrawColor(c)
-  discard g.rend.renderFillRect(addr r)
+  g.renderCmds.add(RenderCmd(kind: RenderFillRect, rect: r, fillColor: c))
 
 proc drawTex(g: Gui, r: var Rect, t: Texture) =
-  discard g.rend.renderCopy(t, nil, addr r)
+  g.renderCmds.add(RenderCmd(kind: RenderDrawTex, rect: r, tex: t))
 
 
 proc horizontal*(g: Gui) =
@@ -83,26 +92,54 @@ proc mouseButton*(g: Gui, x, y: int, b: int) =
   g.mb = b
 
 proc setBounds(g: Gui, rect: Rect) =
-  let br = addr g.box.rect
-  br.w = max(br.w, rect.x - br.x + rect.w)
-  br.h = max(br.h, rect.y - br.y + rect.h)
+  let b = g.box
+  let br = addr b.rect
+  br.w = max(br.w, rect.x - br.x + rect.w + b.margin)
+  br.h = max(br.h, rect.y - br.y + rect.h + b.margin)
 
 proc drawBg(g: Gui, rect: var Rect, hot: bool) =
-  g.fillRect(rect, if hot: g.colBgAct else: g.colBg)
+  g.fillRect(rect, if hot: g.colItemAct else: g.colItem)
   if g.debug: g.drawRect(g.rectHot, g.colHot)
   g.setBounds(rect)
+
+proc start*(g: Gui, x, y: int, packDir: PackDir = PackVer, margin: int = DEF_MARGIN) =
+  if len(g.boxStack) == 0:
+    g.renderCmds.setlen(0)
+  g.box = Box(x: x+margin, y: y+margin, padding: DEF_PADDING, margin: margin, packDir: packDir)
+  g.box.rect = Rect(x: x, y: y, w: 0, h: 0)
+  g.boxStack.add(g.box)
+
+proc start*(g: Gui, packDir: PackDir = PackVer, margin: int = DEF_MARGIN) =
+  g.start(g.box.x, g.box.y, packDir, margin)
 
 proc stop*(g: Gui) =
   if g.debug:
     g.drawRect(g.box.rect, g.colBound) 
 
-  let box_prev = g.boxStack.pop()
+  let box = g.boxStack.pop()
+
+  if len(g.boxStack) == 0:
+    g.renderCmds.insert(RenderCmd(kind: RenderFillRect, rect: g.box.rect, fillColor: g.colBg))
+    #discard g.rend.setRenderDrawColor(g.colBg)
+    #discard g.rend.renderFillRect(addr g.box.rect)
+    for cmd in g.renderCmds:
+      case cmd.kind
+        of RenderDrawRect:
+          discard g.rend.setRenderDrawColor(cmd.drawColor)
+          discard g.rend.renderDrawRect(addr cmd.rect)
+        of RenderFillRect:
+          discard g.rend.setRenderDrawColor(cmd.fillColor)
+          discard g.rend.renderFillRect(addr cmd.rect)
+        of RenderDrawTex:
+          discard g.rend.renderCopy(cmd.tex, nil, addr cmd.rect)
+    g.renderCmds.setlen(0)
+
   let n = len(g.boxStack)
   g.box = if n > 0: g.boxStack[n-1] else: nil
   if g.box != nil:
-    g.setBounds(box_prev.rect)
-    g.updatePos(box_prev.rect.w, box_prev.rect.h)
-  return
+    g.setBounds(box.rect)
+    g.updatePos(box.rect.w, box.rect.h)
+
 
 proc inRect(x, y: int, r: Rect): bool =
   return x >= r.x and x <= r.x+r.w and
@@ -121,7 +158,7 @@ proc is_inside(g: Gui, id: int, r: Rect): bool =
     g.rect_hot = r
 
 
-proc buttonAct(g: Gui, id: int, r: Rect, fn: proc(x, y: int): bool): bool =
+proc doLogic(g: Gui, id: int, r: Rect, fn: proc(x, y: int): bool): bool =
   let inside = g.is_inside(id, r)
 
   if g.id_active == id and g.mb == 1:
@@ -136,9 +173,9 @@ proc buttonAct(g: Gui, id: int, r: Rect, fn: proc(x, y: int): bool): bool =
     g.id_active = id
 
 
-proc buttonAct(g: Gui, id: int, r: Rect): bool =
+proc doLogic(g: Gui, id: int, r: Rect): bool =
   proc fn(x, y: int): bool = return false
-  return buttonAct(g, id, r, fn)
+  return doLogic(g, id, r, fn)
 
 
 
@@ -172,7 +209,7 @@ proc slider*(g: Gui, id: int, label: string, val: var float, val_min, val_max: f
 
   let valp = addr val
 
-  result = g.buttonAct(id, r_slider, proc(x, y: int): bool =
+  result = g.doLogic(id, r_slider, proc(x, y: int): bool =
     var val2 = x2val(x)
     val2 = min(val2, val_max)
     val2 = max(val2, val_min)
@@ -187,9 +224,18 @@ proc slider*(g: Gui, id: int, label: string, val: var int, val_min, val_max: int
   val = int(valf)
 
 
+proc label*(g: Gui, id: int, label: string) =
+  let p = g.box.padding
+  let tt = g.textCache.renderText(label, g.box.x, g.box.y+p, g.colText)
+  var r1 = Rect(x:g.box.x, y:g.box.y, w:tt.w+p*2, h:tt.h+p*2)
+  var r2 = Rect(x:g.box.x+p, y:g.box.y+p, w:tt.w, h:tt.h)
+  g.drawTex(r2, tt.tex)
+  g.setBounds(r1)
+  g.updatePos(r1.w, r1.h)
+
+
 proc button*(g: Gui, id: int, label: string): bool =
   let p = g.box.padding
-
   let tt = g.textCache.renderText(label, g.box.x+p, g.box.y+p, g.colText)
   var r1 = Rect(x:g.box.x, y:g.box.y, w:tt.w+p*2, h:tt.h+p*2)
   var r2 = Rect(x:g.box.x+p, y:g.box.y+p, w:tt.w, h:tt.h)
@@ -198,7 +244,7 @@ proc button*(g: Gui, id: int, label: string): bool =
   g.drawTex(r2, tt.tex)
   g.updatePos(r1.w, r1.h)
 
-  return g.buttonAct(id, r1)
+  return g.doLogic(id, r1)
 
 
 proc button*(g: Gui, id: int, label: string, val: var bool): bool =
@@ -213,7 +259,7 @@ proc button*(g: Gui, id: int, label: string, val: var bool): bool =
 
   g.updatePos(r1.w, r1.h)
 
-  if g.buttonAct(id, r1):
+  if g.doLogic(id, r1):
     val = not val
     return true
 
