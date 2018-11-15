@@ -29,6 +29,7 @@ type
     plan: fftw_plan
     db_top, db_range: float
     cursorX: int
+    enable: bool
 
 proc rect(x: int): float =
   return 1.0
@@ -68,8 +69,9 @@ proc setFFTSize(w: WidgetFFT, s: int) =
 proc newWidgetFFT*(app: App): WidgetFFT =
   var w = WidgetFFT()
 
+  w.enable = true
   w.db_top = 0.0
-  w.db_range = -200.0
+  w.db_range = -96.0
   w.fftsize = 1024
   w.winAdj = 1.0
   w.gui = newGui(app.rend, app.textcache)
@@ -107,34 +109,35 @@ method draw(w: WidgetFFT, app: App, buf: AudioBuffer) =
  
   # FFT
 
-  discard setRenderDrawBlendMode(app.rend, BLENDMODE_ADD);
+  if w.enable:
+    discard setRenderDrawBlendMode(app.rend, BLENDMODE_ADD);
 
-  let n = min(w.fftsize, BLOCKSIZE_MAX)
-  let scale = 1.0 / float(n/2)
-  for j in 0..1:
-    for i in 0..BLOCKSIZE_MAX-1:
-      var v = buf.data[i][j]
-      #v = cos(float(i) * PI * 0.550) * 0.5 +
-      #    cos(float(i) * PI * 0.555) * 0.5 
-      #v = v + rand(0.00001)
-      #v = if v > 0: -1 else: 1
-      w.input[i] = v * scale * w.window[i]
+    let n = min(w.fftsize, BLOCKSIZE_MAX)
+    let scale = 1.0 / float(n/2)
+    for j in 0..1:
+      for i in 0..BLOCKSIZE_MAX-1:
+        var v = buf.data[i][j]
+        #v = cos(float(i) * PI * 0.550) * 0.5 +
+        #    cos(float(i) * PI * 0.555) * 0.5 
+        #v = v + rand(0.00001)
+        #v = if v > 0: -1 else: 1
+        w.input[i] = v * scale * w.window[i]
 
-    fftw_execute(w.plan)
+      fftw_execute(w.plan)
 
-    let n = w.fftsize /% 2 - 1
-    var p: array[FFTSIZE_MAX, sdl.Point]
-    let scale = float(w.h) / float(n)
-    for i in 0..n-1:
-      let v = abs(w.output[i])
-      let vdb = if v>0 : 20 * log10(v) else: -w.db_range
-      let y = db2y(vdb)
-      p[i].x = 30 + cint((w.w - 30) * i / n)
-      p[i].y = cint(y)
-    
-    app.rend.channelColor(j)
+      let n = w.fftsize /% 2 - 1
+      var p: array[FFTSIZE_MAX, sdl.Point]
+      let scale = float(w.h) / float(n)
+      for i in 0..n-1:
+        let v = abs(w.output[i])
+        let vdb = if v>0 : 20 * log10(v) else: -w.db_range
+        let y = db2y(vdb)
+        p[i].x = 30 + cint((w.w - 30) * i / n)
+        p[i].y = cint(y)
+      
+      app.rend.channelColor(j)
 
-    discard app.rend.renderDrawLines(addr(p[0]), n)
+      discard app.rend.renderDrawLines(addr(p[0]), n)
   
   # Cursor
 
@@ -173,17 +176,14 @@ method draw(w: WidgetFFT, app: App, buf: AudioBuffer) =
 
   w.gui.start(210, 10)
   if w.gui.button(1, "Click me"): echo "click"
-  discard w.gui.button(2, "No thanks")
+  discard w.gui.button(2, "Enable", w.enable)
   if w.gui.select(3, "Window", addr w.winType):
     w.setWindowType(w.winType)
   
   if w.winType == Gaussian or w.winType == Cauchy:
     if w.gui.slider(4, "beta", w.winAdj, 0.1, 40.0):
       w.setWindowType(w.winType)
-    
-  discard w.gui.slider(5, "beta", w.db_top, -200, 20.0)
-  echo w.db_top
-
+  w.gui.stop()
 
 method handleMouse*(w: WidgetFFT, x, y: int): bool =
   w.gui.mouseMove(x, y)
