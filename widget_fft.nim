@@ -175,14 +175,18 @@ method draw(w: WidgetFFT, app: App, buf: AudioBuffer) =
   # Gui
 
   w.gui.start(210, 10)
+  w.gui.start(PackHor)
   if w.gui.button(1, "Click me"): echo "click"
   discard w.gui.button(2, "Enable", w.enable)
+  w.gui.stop()
   if w.gui.select(3, "Window", addr w.winType):
     w.setWindowType(w.winType)
   
   if w.winType == Gaussian or w.winType == Cauchy:
+    w.gui.start()
     if w.gui.slider(4, "beta", w.winAdj, 0.1, 40.0):
       w.setWindowType(w.winType)
+    w.gui.stop()
   w.gui.stop()
 
 method handleMouse*(w: WidgetFFT, x, y: int): bool =

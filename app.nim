@@ -118,6 +118,16 @@ proc on_audio(userdata: pointer, stream: ptr uint8, len: cint) {.cdecl.} =
   e.user.data2 = userdata
   c_memcpy(e.user.data1, stream, len)
   discard pushEvent(addr e)
+
+proc on_timer(interval: uint32, userdata: pointer): uint32 {.cdecl.} =
+  let len = 1024
+  var e = sdl.Event()
+  e.user.kind = USEREVENT
+  e.user.code = len
+  e.user.data1 = c_malloc(len)
+  e.user.data2 = userdata
+  discard pushEvent(addr e)
+  return interval
 {.pop.}
 
 
@@ -135,9 +145,15 @@ proc newApp*(w, h: int): App =
   app.rend = createRenderer(app.win, -1, sdl.RendererAccelerated)
   app.textCache = newTextCache(app.rend, "font.ttf")
 
+  discard addTimer(1000 /% 30, on_timer, nil)
+
   let n = sdl.getNumAudioDevices(1)
+  echo n, " audio devices found:"
   for i in 1..n:
     closureScope:
+      
+      let name = getAudioDeviceName(i, 1)
+      echo " - ", name
 
       var want = AudioSpec(
         freq: 48000,

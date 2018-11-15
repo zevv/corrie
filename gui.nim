@@ -1,11 +1,15 @@
 import sdl2/sdl
 import widget
 import textcache
+import strutils
 import typetraits
+
+const DEF_MARGIN = 5
+const DEF_PADDING = 4
 
 type
 
-  PackDir = enum
+  PackDir* = enum
     PackHor, PackVer
 
   Box = ref object
@@ -17,28 +21,39 @@ type
 
   Gui* = ref object
     id_active: int
+    debug: bool
     rect_hot: Rect
     textCache: TextCache
     rend: Renderer
     mx, my, mb: int
-    colText: Color
+    colFg, colBg, colBgAct, colText, colHot, colBound: Color
     box: Box
     boxStack: seq[Box]
 
 
 proc newGui*(rend: Renderer, textCache: TextCache): Gui =
   let g = Gui(rend: rend, textCache: textCache)
-  g.colText = Color(r:255, g:255, b:255)
+  g.colFg = Color(r: 150, g:120, b: 50, a:255)
+  g.colBg = Color(r:30, g:50, b:100, a:255)
+  g.colBgAct = Color(r:80, g:140, b:140, a:255)
+  g.colText = Color(r:255, g:255, b:255, a:255)
+  g.colHot = Color(r:255, g:0, b:0, a:255)
+  g.colBound = Color(r:0, g:255, b:0, a:255)
   return g
 
+proc updatePos(g: Gui, dx, dy: int) =
+  if g.box.packDir == PackHor:
+    g.box.x = g.box.x + dx + g.box.margin
+  else:
+    g.box.y = g.box.y + dy + g.box.margin
 
-proc start*(g: Gui, x, y: int) =
-  g.box = Box(x: x, y: y, padding: 5, margin: 5, packDir: PackVer)
+proc start*(g: Gui, x, y: int, packDir: PackDir = PackVer, margin: int = DEF_MARGIN) =
+  g.box = Box(x: x, y: y, padding: DEF_PADDING, margin: margin, packDir: packDir)
+  g.box.rect = Rect(x: x, y: y, w: 0, h: 0)
   g.boxStack.add(g.box)
 
-
-proc stop*(g: Gui) =
-  return
+proc start*(g: Gui, packDir: PackDir = PackVer, margin: int = DEF_MARGIN) =
+  g.start(g.box.x, g.box.y, packDir, margin)
 
 
 proc horizontal*(g: Gui) =
@@ -56,24 +71,33 @@ proc mouseButton*(g: Gui, x, y: int, b: int) =
   g.my = y
   g.mb = b
 
-proc updatePos(g: Gui, dx, dy: int) =
-  if g.box.packDir == PackHor:
-    g.box.x = g.box.x + dx + g.box.margin
-  else:
-    g.box.y = g.box.y + dy + g.box.margin
+proc setBounds(g: Gui, rect: Rect) =
+  let br = addr g.box.rect
+  br.w = max(br.w, rect.x - br.x + rect.w)
+  br.h = max(br.h, rect.y - br.y + rect.h)
 
-proc drawBg(g: Gui, rect: ptr Rect, hot: bool) =
+proc drawBg(g: Gui, rect: var Rect, hot: bool) =
+  discard g.rend.setRenderDrawColor(if hot: g.colBgAct else: g.colBg)
+  discard g.rend.renderFillRect(addr rect)
 
-  if hot:
-    discard g.rend.setRenderDrawColor(70, 70, 200, 255)
-    discard g.rend.setRenderDrawColor(150, 120, 50, 255)
-  else:
-    discard g.rend.setRenderDrawColor(30, 50, 100, 255)
-  discard g.rend.renderFillRect(rect)
+  if g.debug:
+    discard g.rend.setRenderDrawColor(g.colHot)
+    discard g.rend.renderDrawRect(addr g.rect_hot)
 
-  discard g.rend.setRenderDrawColor(255, 50, 50, 255)
-  discard g.rend.renderDrawRect(addr g.rect_hot)
+  g.setBounds(rect)
 
+
+proc stop*(g: Gui) =
+  if g.debug:
+    discard g.rend.setRenderDrawColor(g.colBound)
+    discard g.rend.renderDrawRect(addr g.box.rect)
+  let box_prev = g.boxStack.pop()
+  let n = len(g.boxStack)
+  g.box = if n > 0: g.boxStack[n-1] else: nil
+  if g.box != nil:
+    g.setBounds(box_prev.rect)
+    g.updatePos(box_prev.rect.w, box_prev.rect.h)
+  return
 
 proc inRect(x, y: int, r: Rect): bool =
   return x >= r.x and x <= r.x+r.w and
@@ -121,21 +145,20 @@ proc slider*(g: Gui, id: int, label: string, val: var float, val_min, val_max: f
   let w = 200
   let knob_w = 15
 
-  let tt = g.textCache.renderText(label, g.box.x+p, g.box.y+p, g.colText)
+  let t = label & ": " & val.formatFloat(ffDecimal, 0)
+  let tt = g.textCache.renderText(t, g.box.x+p, g.box.y+p, g.colText)
   
   var r_slider = Rect(x:g.box.x, y:g.box.y, w:w+p*2, h:tt.h+p*2)
-
-  g.drawBg(addr r_slider, g.id_active == id)
-  
+  var r_label = Rect(x:g.box.x+(w - tt.w)/%2, y:g.box.y+p, w:tt.w, h:tt.h)
   var r_knob = Rect(
     x: g.box.x + p + int(float(w-knob_w) * (val - val_min) / (val_max - val_min)), 
     y: g.box.y + p,
     w: knob_w,
     h: r_slider.h - p*2)
-  discard g.rend.setRenderDrawColor(100, 200, 200, 255)
+  g.drawBg(r_slider, g.id_active == id)
+  
+  discard g.rend.setRenderDrawColor(g.colFg)
   discard g.rend.renderFillRect(addr r_knob)
-
-  var r_label = Rect(x:g.box.x+p+m+w, y:g.box.y+p, w:tt.w, h:tt.h)
   discard g.rend.renderCopy(tt.tex, nil, addr r_label)
 
   g.updatePos(r_slider.w + r_label.w, r_slider.h)
@@ -152,42 +175,34 @@ proc slider*(g: Gui, id: int, label: string, val: var float, val_min, val_max: f
 
   result = g.buttonAct(id, r_slider, on_move)
 
-
 proc slider*(g: Gui, id: int, label: string, val: var int, val_min, val_max: int): bool =
   var valf = float(val)
   result = g.slider(id, label, valf, float(val_min), float(val_max))
   val = int(valf)
 
-proc button*(g: Gui, id: int, label: string): bool =
 
-  result = false
+proc button*(g: Gui, id: int, label: string): bool =
   let p = g.box.padding
-  let m = g.box.margin
 
   let tt = g.textCache.renderText(label, g.box.x+p, g.box.y+p, g.colText)
-  
   var r1 = Rect(x:g.box.x, y:g.box.y, w:tt.w+p*2, h:tt.h+p*2)
-  g.drawBg(addr r1, g.id_active == id)
-
   var r2 = Rect(x:g.box.x+p, y:g.box.y+p, w:tt.w, h:tt.h)
-  discard g.rend.renderCopy(tt.tex, nil, addr r2)
 
+  g.drawBg(r1, g.id_active == id)
+  discard g.rend.renderCopy(tt.tex, nil, addr r2)
   g.updatePos(r1.w, r1.h)
 
   return g.buttonAct(id, r1)
 
 
-
 proc button*(g: Gui, id: int, label: string, val: var bool): bool =
   let p = g.box.padding
-  let m = g.box.margin
 
   let tt = g.textCache.renderText(label, g.box.x+p, g.box.y+p, g.colText)
-  
   var r1 = Rect(x:g.box.x, y:g.box.y, w:tt.w+p*2, h:tt.h+p*2)
-  g.drawBg(addr r1, val)
-
   var r2 = Rect(x:g.box.x+p, y:g.box.y+p, w:tt.w, h:tt.h)
+
+  g.drawBg(r1, val)
   discard g.rend.renderCopy(tt.tex, nil, addr r2)
 
   g.updatePos(r1.w, r1.h)
@@ -199,11 +214,7 @@ proc button*(g: Gui, id: int, label: string, val: var bool): bool =
 
 proc select*(g: Gui, id: int, label: string, val: var int, items: seq[string]): bool =
 
-  let m = g.box.margin
-  let d = g.box.packDir
-
-  g.box.margin = 0
-  g.box.packDir = PackHor
+  g.start(PackHor, 0)
 
   let n = len(items)
   var vals: seq[bool]
@@ -218,8 +229,8 @@ proc select*(g: Gui, id: int, label: string, val: var int, items: seq[string]): 
       val = i
       result = true
 
-  g.box.margin = m
-  g.box.packdir = d
+  g.stop()
+
 
 
 
@@ -238,7 +249,7 @@ proc select2*(g: Gui, id: int, label: string, val: var int, items: seq[string]):
     let item = items[i]
     let tt = g.textCache.renderText(item, x, y, g.colText)
     var r_bg = Rect(x: x, y: y, w: tt.w + p*2, h: tt.h + p*2)
-    g.drawBg(addr r_bg, val == i)
+    g.drawBg(r_bg, val == i)
 
     var r_text = Rect(x: x+g.box.padding, y: y+g.box.padding, w: tt.w, h: tt.h)
     discard g.rend.renderCopy(tt.tex, nil, addr r_text)

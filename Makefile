@@ -1,5 +1,5 @@
 
-all: corrie corrienim
+all: corrienim
 
 
 BIN   	= corrie
