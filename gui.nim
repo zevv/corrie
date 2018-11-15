@@ -55,6 +55,17 @@ proc start*(g: Gui, x, y: int, packDir: PackDir = PackVer, margin: int = DEF_MAR
 proc start*(g: Gui, packDir: PackDir = PackVer, margin: int = DEF_MARGIN) =
   g.start(g.box.x, g.box.y, packDir, margin)
 
+proc drawRect(g: Gui, r: var Rect, c: Color) =
+  discard g.rend.setRenderDrawColor(c)
+  discard g.rend.renderDrawRect(addr r)
+
+proc fillRect(g: Gui, r: var Rect, c: Color) =
+  discard g.rend.setRenderDrawColor(c)
+  discard g.rend.renderFillRect(addr r)
+
+proc drawTex(g: Gui, r: var Rect, t: Texture) =
+  discard g.rend.renderCopy(t, nil, addr r)
+
 
 proc horizontal*(g: Gui) =
   g.box.packDir = PackHor
@@ -77,20 +88,14 @@ proc setBounds(g: Gui, rect: Rect) =
   br.h = max(br.h, rect.y - br.y + rect.h)
 
 proc drawBg(g: Gui, rect: var Rect, hot: bool) =
-  discard g.rend.setRenderDrawColor(if hot: g.colBgAct else: g.colBg)
-  discard g.rend.renderFillRect(addr rect)
-
-  if g.debug:
-    discard g.rend.setRenderDrawColor(g.colHot)
-    discard g.rend.renderDrawRect(addr g.rect_hot)
-
+  g.fillRect(rect, if hot: g.colBgAct else: g.colBg)
+  if g.debug: g.drawRect(g.rectHot, g.colHot)
   g.setBounds(rect)
-
 
 proc stop*(g: Gui) =
   if g.debug:
-    discard g.rend.setRenderDrawColor(g.colBound)
-    discard g.rend.renderDrawRect(addr g.box.rect)
+    g.drawRect(g.box.rect, g.colBound) 
+
   let box_prev = g.boxStack.pop()
   let n = len(g.boxStack)
   g.box = if n > 0: g.boxStack[n-1] else: nil
@@ -145,35 +150,36 @@ proc slider*(g: Gui, id: int, label: string, val: var float, val_min, val_max: f
   let w = 200
   let knob_w = 15
 
+  proc val2x(val: float): int =
+    return g.box.x + p + int(float(w-knob_w) * (val - val_min) / (val_max - val_min))
+
+  proc x2val(x: int): float =
+    result = val_min + float(x - g.box.x - p - knob_w/%2) *
+               (val_max - val_min) / float(w-knob_w)
+    result = clamp(result, val_min, val_max)
+
   let t = label & ": " & val.formatFloat(ffDecimal, 0)
   let tt = g.textCache.renderText(t, g.box.x+p, g.box.y+p, g.colText)
-  
+ 
   var r_slider = Rect(x:g.box.x, y:g.box.y, w:w+p*2, h:tt.h+p*2)
   var r_label = Rect(x:g.box.x+(w - tt.w)/%2, y:g.box.y+p, w:tt.w, h:tt.h)
-  var r_knob = Rect(
-    x: g.box.x + p + int(float(w-knob_w) * (val - val_min) / (val_max - val_min)), 
-    y: g.box.y + p,
-    w: knob_w,
-    h: r_slider.h - p*2)
+  var r_knob = Rect(x:val2x(val), y: g.box.y + p, w: knob_w, h: r_slider.h - p*2)
   g.drawBg(r_slider, g.id_active == id)
-  
-  discard g.rend.setRenderDrawColor(g.colFg)
-  discard g.rend.renderFillRect(addr r_knob)
-  discard g.rend.renderCopy(tt.tex, nil, addr r_label)
+  g.fillRect(r_knob, g.colFg)
+  g.drawTex(r_label, tt.tex)
 
   g.updatePos(r_slider.w + r_label.w, r_slider.h)
 
   let valp = addr val
-  proc on_move(x, y: int): bool =
-    var val2 = val_min + float(x - r_slider.x - p - knob_w/%2) * 
-               (val_max - val_min) / float(w-knob_w)
+
+  result = g.buttonAct(id, r_slider, proc(x, y: int): bool =
+    var val2 = x2val(x)
     val2 = min(val2, val_max)
     val2 = max(val2, val_min)
     if val2 != valp[]:
       valp[] = val2
       return true
-
-  result = g.buttonAct(id, r_slider, on_move)
+    )
 
 proc slider*(g: Gui, id: int, label: string, val: var int, val_min, val_max: int): bool =
   var valf = float(val)
@@ -189,7 +195,7 @@ proc button*(g: Gui, id: int, label: string): bool =
   var r2 = Rect(x:g.box.x+p, y:g.box.y+p, w:tt.w, h:tt.h)
 
   g.drawBg(r1, g.id_active == id)
-  discard g.rend.renderCopy(tt.tex, nil, addr r2)
+  g.drawTex(r2, tt.tex)
   g.updatePos(r1.w, r1.h)
 
   return g.buttonAct(id, r1)
@@ -203,7 +209,7 @@ proc button*(g: Gui, id: int, label: string, val: var bool): bool =
   var r2 = Rect(x:g.box.x+p, y:g.box.y+p, w:tt.w, h:tt.h)
 
   g.drawBg(r1, val)
-  discard g.rend.renderCopy(tt.tex, nil, addr r2)
+  g.drawTex(r2, tt.tex)
 
   g.updatePos(r1.w, r1.h)
 
@@ -230,47 +236,6 @@ proc select*(g: Gui, id: int, label: string, val: var int, items: seq[string]): 
       result = true
 
   g.stop()
-
-
-
-
-proc select2*(g: Gui, id: int, label: string, val: var int, items: seq[string]): bool =
-  result = false
-  var x = g.box.x
-  var y = g.box.y
-  let p = g.box.padding
-  let m = g.box.margin
-
-  var hTot = 0
-  var wTot = 0
-
-  for i in 0..len(items)-1:
-
-    let item = items[i]
-    let tt = g.textCache.renderText(item, x, y, g.colText)
-    var r_bg = Rect(x: x, y: y, w: tt.w + p*2, h: tt.h + p*2)
-    g.drawBg(r_bg, val == i)
-
-    var r_text = Rect(x: x+g.box.padding, y: y+g.box.padding, w: tt.w, h: tt.h)
-    discard g.rend.renderCopy(tt.tex, nil, addr r_text)
-    x = x + tt.w + g.box.margin
-
-    let inside = g.is_inside(id, r_bg)
-
-    if g.id_active == id and g.mb == 0:
-      if inside:
-        echo "release ", i
-        if inside:
-          val = i
-          result = true
-        g.id_active = 0
-    elif inside and g.mb == 1:
-      g.id_active = id
-
-    wTot = wTot + r_bg.w
-    hTot = r_bg.h
-
-  g.updatePos(wTot, hTot)
 
 
 template select*(g: Gui, id: int, label: string, val: typed): bool =
