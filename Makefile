@@ -35,6 +35,9 @@ c: $(wildcard *.nim) Makefile
 	nim c -d:debug --debugger:native c.nim
 
 crel: $(wildcard *.nim) Makefile
-	nim c -d:release -o:crel c.nim
+	nim c -d:release --debuginfo -o:crel c.nim
+
+cprof: $(wildcard *.nim) Makefile
+	nim c --profiler:on  --stacktrace:on -o:cprof c.nim
 
 -include $(DEPS)

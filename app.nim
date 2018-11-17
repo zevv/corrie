@@ -77,7 +77,7 @@ proc run*(app: App): bool =
       if e.kind == sdl.KeyDown:
         let key = e.key.keysym.sym
         if key == K_ESCAPE or key == K_Q:
-          quit(0)
+          return
         var mx, my: cint
         discard getMouseState(addr(mx), addr(my))
         echo (repr key) & " " & $mx & " " & $my
@@ -182,15 +182,16 @@ proc newApp*(w, h: int): App =
     for i in 0..(1*1024*1024):
       var a: array[2048, cfloat]
       a[0] = cos(float(i) * 0.1)  * cos(float(i) * 0.001)
-      a[1] = cos(float(i) * sqrt(float(i)) * 0.1) * 0.25
+     
+      a[1] = cos(float(i) * 1.0) * 0.2
 
-      var f = 150.0
+      var f = 0.2
       if a[0] > 0:
-         a[0] = 1 - pow(f, -a[0]);
+         a[0] =  pow(a[0], f);
       else:
-         a[0] = -1 + pow(f, a[0]);
+         a[0] = -pow(-a[0], f);
 
-      a[0] = a[0] + cos(float(i) * 0.003)
+      a[0] = a[0] + cos(float(i) * 0.003) * 0.5
       a[0] = a[0] * 0.25 + 0.5
       a[1] = a[1] - 0.5
 

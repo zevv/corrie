@@ -49,21 +49,6 @@ method draw(w: WidgetScope, rend: Renderer, app: App, cv: CapView) =
   discard rend.setRenderDrawColor(30, 30, 30, 255)
   discard rend.renderDrawLine(0, int(yc), w.w, int(yc))
   
-  # Window
-
-  if true:
-    let d = cv.win.getData()
-    let l = d.len()
-    var p = newSeq[Point](l)
-    for i in 0..l-1:
-      let v = d[i]
-      let y = v * float(w.h)
-      p[i].x = w.w - cint(float(cv.getCursor() - i + l/%2) / w.hScale)
-      p[i].y = w.h - cint(y)
-
-    discard rend.setRenderDrawColor(0, 0, 255, 255)
-    discard rend.renderDrawLines(addr(p[0]), l)
-
   # Scope
 
   let vScale = w.vScale * float(w.h) * 0.5
@@ -145,6 +130,7 @@ method draw(w: WidgetScope, rend: Renderer, app: App, cv: CapView) =
     usetex = true
     for j in 0..1:
       var amax = w.amax[j]
+      if amax == 0: amax = 1.0
       var amax_next = 0.0
       for x in 0 .. w.w-1:
         let i1 = int(float(w.w-x+0) * w.hScale)
@@ -170,7 +156,7 @@ method draw(w: WidgetScope, rend: Renderer, app: App, cv: CapView) =
         var b = a + x * 4
         for y in 0..w.h-1:
           var c = cast[ptr uint32](b)
-          let pp = int(255.0 * accum[y] / amax)
+          var pp = int(255.0 * accum[y] / amax)
           c[] = c[] or 0x000000ff
           if j == 0:
             c[] = c[] + uint32(int(pp) * 0x01000100)
@@ -196,6 +182,24 @@ method draw(w: WidgetScope, rend: Renderer, app: App, cv: CapView) =
     let x = w.w - int(float(cv.getCursor()) / w.hScale)
     discard rend.renderDrawLine(x, 0, x, w.h)
     discard setRenderDrawBlendMode(rend, BLENDMODE_BLEND);
+  
+  # Window
+
+  if true:
+    let d = cv.win.getData()
+    let l = d.len()
+    var p = newSeq[Point](l)
+    for i in 0..l-1:
+      let v = d[i]
+      let y = v * float(w.h)
+      p[i].x = w.w - cint(float(cv.getCursor() - i + l/%2) / w.hScale)
+      p[i].y = w.h - cint(y)
+
+    discard setRenderDrawBlendMode(rend, BLENDMODE_ADD);
+    discard rend.setRenderDrawColor(0, 0, 255, 255)
+    discard rend.renderDrawLines(addr(p[0]), l)
+    discard setRenderDrawBlendMode(rend, BLENDMODE_BLEND);
+
 
   # Gui
 
