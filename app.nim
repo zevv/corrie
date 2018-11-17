@@ -160,7 +160,7 @@ proc newApp*(w, h: int): App =
   for i in 1..n:
     closureScope:
       
-      var want = AudioSpec(
+      var want = ref AudioSpec(
         freq: 48000,
         format: AUDIO_F32,
         channels: 2,
