@@ -8,35 +8,47 @@ type
   TextTex* = ref object
     tex*: Texture
     w*, h*: int
+    age: int
   
   TextCache* = ref object
     font: Font
     cache: Table[string, TextTex]
     rend: Renderer
+    ticks: int
 
 
 proc newTextCache*(rend: Renderer, fontname: string): TextCache =
   var tc = TextCache(
     rend: rend,
-    font: openFont("font.ttf", 16),
+    font: openFont("font.ttf", 12),
     cache: initTable[string, TextTex](),
   )
   assert(tc.font != nil)
   return tc
 
+proc pruneCache(tc: TextCache) =
+  tc.ticks = tc.ticks + 1
+  if tc.ticks > 128:
+    tc.ticks = 0
+    for s, tex in pairs(tc.cache):
+      inc(tex.age)
+      if tex.age > 10:
+        destroyTexture(tex.tex)
+        tc.cache.del(s)
 
 proc renderText*(tc: TextCache, text: string, x, y: int, color: Color): TextTex =
-  var tt: TextTex
   if len(text) > 0:
     try:
-      tt = tc.cache[text]
+      result = tc.cache[text]
     except KeyError:
       let s = tc.font.renderUTF8_Blended(text, color)
       let tex = tc.rend.createTextureFromSurface(s)
-      tt = TextTex(tex: tex, w: s.w, h: s.h)
+      result = TextTex(tex: tex, w: s.w, h: s.h)
       freeSurface(s)
-      tc.cache[text] = tt
-  return tt
+      tc.cache[text] = result
+  if result != nil:
+    result.age = 0
+  tc.pruneCache()
 
 proc drawText*(tc: TextCache, text: string, x, y: int, color: Color) =
   let tt = tc.renderText(text, x, y, color)

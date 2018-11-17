@@ -7,6 +7,7 @@ import gui
 import app
 import strutils
 import textcache
+import capbuf
 
 const FFTSIZE_MAX = 16384
 
@@ -29,7 +30,8 @@ type
     plan: fftw_plan
     db_top, db_range: float
     cursorX: int
-    enable: bool
+    showWindowOpts: bool
+    showFFTOpts: bool
 
 proc rect(x: int): float =
   return 1.0
@@ -69,14 +71,13 @@ proc setFFTSize(w: WidgetFFT, s: int) =
 proc newWidgetFFT*(app: App): WidgetFFT =
   var w = WidgetFFT()
 
-  w.enable = true
   w.db_top = 0.0
   w.db_range = -96.0
   w.fftsize = 1024
-  w.winAdj = 1.0
+  w.winAdj = 3.0
   w.gui = newGui(app.rend, app.textcache)
 
-  w.setWindowType(Gaussian)
+  w.setWindowType(Blackman)
   w.setFFTSize(w.fftsize)
 
   return w
@@ -87,55 +88,58 @@ var ss  = 1.0
 
  
 method draw(w: WidgetFFT, app: App, buf: AudioBuffer) =
+  
+  let cb = app.capBuf
+  let offset = cb.getCursor()
 
   proc db2y(v: float): int =
       return int(-v * float(w.h) / -w.db_Range)
 
   # Grid
 
-  ss = ss * 1.00001
-  discard app.rend.setRenderDrawColor(30, 30, 30, 255)
-  var step = -5.0
-  while db2y(step) < 16:
-    step = step * 2
-  var v = step
-  while v > w.db_range:
-    let y = db2y(v)
-    discard app.rend.renderDrawLine(0, y, w.w, y)
-    app.textCache.drawText(align($int(v), 4), 3, y)
-    v = v + step
+  if true:
+    ss = ss * 1.00001
+    discard app.rend.setRenderDrawColor(30, 30, 30, 255)
+    var step = -5.0
+    while db2y(step) < 16:
+      step = step * 2
+    var v = step
+    while v > w.db_range:
+      let y = db2y(v)
+      discard app.rend.renderDrawLine(0, y, w.w, y)
+      app.textCache.drawText(align($int(v), 4), 3, y)
+      v = v + step
  
   # FFT
 
-  if w.enable:
-    discard setRenderDrawBlendMode(app.rend, BLENDMODE_ADD);
+  discard setRenderDrawBlendMode(app.rend, BLENDMODE_ADD);
 
-    let n = min(w.fftsize, BLOCKSIZE_MAX)
-    let scale = 1.0 / float(n/2)
-    for j in 0..1:
-      for i in 0..BLOCKSIZE_MAX-1:
-        var v = buf.data[i][j]
-        #v = cos(float(i) * PI * 0.550) * 0.5 +
-        #    cos(float(i) * PI * 0.555) * 0.5 
-        #v = v + rand(0.00001)
-        #v = if v > 0: -1 else: 1
-        w.input[i] = v * scale * w.window[i]
+  let n = min(w.fftsize, BLOCKSIZE_MAX)
+  let scale = 1.0 / float(n/2)
+  for j in 0..1:
+    for i in 0..BLOCKSIZE_MAX-1:
+      var v = cb.read(j, i+offset)
+      #v = cos(float(i) * PI * 0.550) * 0.5 +
+      #    cos(float(i) * PI * 0.555) * 0.5 
+      #v = v + rand(0.00001)
+      #v = if v > 0: -1 else: 1
+      w.input[i] = v * scale * w.window[i]
 
-      fftw_execute(w.plan)
+    fftw_execute(w.plan)
 
-      let n = w.fftsize /% 2 - 1
-      var p: array[FFTSIZE_MAX, sdl.Point]
-      let scale = float(w.h) / float(n)
-      for i in 0..n-1:
-        let v = abs(w.output[i])
-        let vdb = if v>0 : 20 * log10(v) else: -w.db_range
-        let y = db2y(vdb)
-        p[i].x = 30 + cint((w.w - 30) * i / n)
-        p[i].y = cint(y)
-      
-      app.rend.channelColor(j)
+    let n = w.fftsize /% 2 - 1
+    var p: array[FFTSIZE_MAX, sdl.Point]
+    let scale = float(w.h) / float(n)
+    for i in 0..n-1:
+      let v = abs(w.output[i])
+      let vdb = if v>0 : 20 * log10(v) else: -w.db_range
+      let y = db2y(vdb)
+      p[i].x = 30 + cint((w.w - 30) * i / n)
+      p[i].y = cint(y)
+    
+    app.rend.channelColor(j)
 
-      discard app.rend.renderDrawLines(addr(p[0]), n)
+    discard app.rend.renderDrawLines(addr(p[0]), n)
   
   # Cursor
 
@@ -153,13 +157,13 @@ method draw(w: WidgetFFT, app: App, buf: AudioBuffer) =
           f1 = f1 * 2
         else:
           f1 = f1 + f
+    discard setRenderDrawBlendMode(app.rend, BLENDMODE_BLEND);
 
 
-  discard setRenderDrawBlendMode(app.rend, BLENDMODE_BLEND);
 
   # Window
 
-  if true:
+  if w.showWindowOpts:
     var p: array[BLOCKSIZE_MAX, sdl.Point]
     for i in 0..BLOCKSIZE_MAX-1:
       let v = w.window[i]
@@ -174,19 +178,27 @@ method draw(w: WidgetFFT, app: App, buf: AudioBuffer) =
 
   w.gui.start(100, 0)
   w.gui.start(PackHor)
-  discard w.gui.button(2, "Enable", w.enable)
-  w.gui.label(10, "FFT " & $w.fftSize & " " & $w.winType & "/" & formatFloat(w.winAdj, precision=2))
+  discard w.gui.button("Window", w.showWindowOpts)
+  discard w.gui.button("FFT", w.showFFTOpts)
+  w.gui.label("FFT " & $w.fftSize & " " & $w.winType & "/" & formatFloat(w.winAdj, precision=2))
   w.gui.stop()
-  if w.enable:
+
+  if w.showWindowOpts:
     w.gui.start(PackVer)
-    if w.gui.button(1, "Click me"):
-      echo "click"
-    if w.gui.select(3, "Window", addr w.winType):
+    if w.gui.select("Window", addr w.winType, true):
       w.setWindowType(w.winType)
     if w.winType == Gaussian or w.winType == Cauchy:
-      if w.gui.slider(4, "beta", w.winAdj, 0.1, 40.0):
+      if w.gui.slider("beta", w.winAdj, 0.1, 40.0, true):
         w.setWindowType(w.winType)
     w.gui.stop()
+
+  if w.showFFTOpts:
+    w.gui.start(PackVer)
+    if w.gui.slider("FFT size", w.fftSize, 128, FFTSIZE_MAX, true):
+      w.fftSize = int(pow(2, floor(log2(float(w.fftSize)))))
+      w.setFFTSize(w.fftSize)
+    w.gui.stop()
+
   w.gui.stop()
 
 method handleMouse*(w: WidgetFFT, x, y: int): bool =

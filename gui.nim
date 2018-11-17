@@ -1,10 +1,11 @@
 import sdl2/sdl
 import widget
 import textcache
+import math
 import strutils
 import typetraits
 
-const DEF_MARGIN = 5
+const DEF_MARGIN = 2
 const DEF_PADDING = 4
 const DEFER = true
 
@@ -34,7 +35,7 @@ type
     margin: int
 
   Gui* = ref object
-    id_active: int
+    id_active: string
     debug: bool
     rect_hot: Rect
     textCache: TextCache
@@ -103,11 +104,10 @@ proc drawBg(g: Gui, rect: var Rect, hot: bool) =
   g.setBounds(rect)
 
 proc start*(g: Gui, x, y: int, packDir: PackDir = PackVer, margin: int = DEF_MARGIN) =
-  if len(g.boxStack) == 0:
-    g.renderCmds.setlen(0)
-  g.box = Box(x: x+margin, y: y+margin, padding: DEF_PADDING, margin: margin, packDir: packDir)
-  g.box.rect = Rect(x: x, y: y, w: 0, h: 0)
-  g.boxStack.add(g.box)
+  var box = Box(x: x+margin, y: y+margin, padding: DEF_PADDING, margin: margin, packDir: packDir)
+  box.rect = Rect(x: x, y: y, w: 0, h: 0)
+  g.boxStack.add(box)
+  g.box = box
 
 proc start*(g: Gui, packDir: PackDir = PackVer, margin: int = DEF_MARGIN) =
   g.start(g.box.x, g.box.y, packDir, margin)
@@ -150,15 +150,13 @@ proc hasMouse(g: Gui, rect: Rect): bool =
   return inRect(g.mx, g.my, rect)
 
 
-
-
-proc is_inside(g: Gui, id: int, r: Rect): bool =
-  result = g.hasMouse(r) and (g.id_active == 0 or g.id_active == id)
+proc is_inside(g: Gui, id: string, r: Rect): bool =
+  result = g.hasMouse(r) and (g.id_active == "" or g.id_active == id)
   if result:
     g.rect_hot = r
 
 
-proc doLogic(g: Gui, id: int, r: Rect, fn: proc(x, y: int): bool): bool =
+proc doLogic(g: Gui, id: string, r: Rect, fn: proc(x, y: int): bool): bool =
   let inside = g.is_inside(id, r)
 
   if g.id_active == id and g.mb == 1:
@@ -167,40 +165,51 @@ proc doLogic(g: Gui, id: int, r: Rect, fn: proc(x, y: int): bool): bool =
   if g.id_active == id and g.mb == 0:
     if inside:
       result = true
-    g.id_active = 0
+    g.id_active = ""
 
   elif inside and g.mb == 1:
     g.id_active = id
 
 
-proc doLogic(g: Gui, id: int, r: Rect): bool =
+proc doLogic(g: Gui, id: string, r: Rect): bool =
   proc fn(x, y: int): bool = return false
   return doLogic(g, id, r, fn)
 
 
 
-proc slider*(g: Gui, id: int, label: string, val: var float, val_min, val_max: float): bool =
+proc slider*(g: Gui, id: string, val: var float, vmin, vmax: float, do_log: bool=false, size_req: int=0): bool =
 
   result = false
   let p = g.box.padding
   let m = g.box.margin
-  let w = 200
   let knob_w = 15
+  
+  let t = id & ": " & val.formatFloat(ffDecimal, 0)
+  let tt = g.textCache.renderText(t, g.box.x+p, g.box.y+p, g.colText)
+  
+  var size = if size_req > 0: size_req else: tt.h * 15
 
-  proc val2x(val: float): int =
-    return g.box.x + p + int(float(w-knob_w) * (val - val_min) / (val_max - val_min))
+  let xmin = g.box.x + p + knob_w/%2
+  let xmax = g.box.x + size - knob_w/%2
+
+  proc val2x(v: float): int =
+    var f = (v - vmin) / (vmax - vmin)
+    f = clamp(f, 0.0, 1.0)
+    if do_log:
+      f = pow(f, 1/2.0)
+    return xmin + int(f * float(xmax - xmin))
 
   proc x2val(x: int): float =
-    result = val_min + float(x - g.box.x - p - knob_w/%2) *
-               (val_max - val_min) / float(w-knob_w)
-    result = clamp(result, val_min, val_max)
+    var f = (x - xmin) / (xmax - xmin)
+    f = clamp(f, 0.0, 1.0)
+    if do_log:
+      f = pow(f, 2.0)
+    result = vmin + f * (vmax - vmin)
 
-  let t = label & ": " & val.formatFloat(ffDecimal, 0)
-  let tt = g.textCache.renderText(t, g.box.x+p, g.box.y+p, g.colText)
  
-  var r_slider = Rect(x:g.box.x, y:g.box.y, w:w+p*2, h:tt.h+p*2)
-  var r_label = Rect(x:g.box.x+(w - tt.w)/%2, y:g.box.y+p, w:tt.w, h:tt.h)
-  var r_knob = Rect(x:val2x(val), y: g.box.y + p, w: knob_w, h: r_slider.h - p*2)
+  var r_slider = Rect(x:g.box.x, y:g.box.y, w:size+p*2, h:tt.h+p*2)
+  var r_label = Rect(x:g.box.x+(size - tt.w)/%2, y:g.box.y+p, w:tt.w, h:tt.h)
+  var r_knob = Rect(x:val2x(val)-knob_w/%2, y: g.box.y + p, w: knob_w, h: r_slider.h - p*2)
   g.drawBg(r_slider, g.id_active == id)
   g.fillRect(r_knob, g.colFg)
   g.drawTex(r_label, tt.tex)
@@ -210,23 +219,21 @@ proc slider*(g: Gui, id: int, label: string, val: var float, val_min, val_max: f
   let valp = addr val
 
   result = g.doLogic(id, r_slider, proc(x, y: int): bool =
-    var val2 = x2val(x)
-    val2 = min(val2, val_max)
-    val2 = max(val2, val_min)
+    let val2 = x2val(x)
     if val2 != valp[]:
       valp[] = val2
       return true
     )
 
-proc slider*(g: Gui, id: int, label: string, val: var int, val_min, val_max: int): bool =
+proc slider*(g: Gui, id: string, val: var int, vmin, vmax: int, log: bool=false): bool =
   var valf = float(val)
-  result = g.slider(id, label, valf, float(val_min), float(val_max))
+  result = g.slider(id, valf, float(vmin), float(vmax), log)
   val = int(valf)
 
 
-proc label*(g: Gui, id: int, label: string) =
+proc label*(g: Gui, id: string) =
   let p = g.box.padding
-  let tt = g.textCache.renderText(label, g.box.x, g.box.y+p, g.colText)
+  let tt = g.textCache.renderText(id, g.box.x, g.box.y+p, g.colText)
   var r1 = Rect(x:g.box.x, y:g.box.y, w:tt.w+p*2, h:tt.h+p*2)
   var r2 = Rect(x:g.box.x+p, y:g.box.y+p, w:tt.w, h:tt.h)
   g.drawTex(r2, tt.tex)
@@ -234,9 +241,9 @@ proc label*(g: Gui, id: int, label: string) =
   g.updatePos(r1.w, r1.h)
 
 
-proc button*(g: Gui, id: int, label: string): bool =
+proc button*(g: Gui, id: string): bool =
   let p = g.box.padding
-  let tt = g.textCache.renderText(label, g.box.x+p, g.box.y+p, g.colText)
+  let tt = g.textCache.renderText(id, g.box.x+p, g.box.y+p, g.colText)
   var r1 = Rect(x:g.box.x, y:g.box.y, w:tt.w+p*2, h:tt.h+p*2)
   var r2 = Rect(x:g.box.x+p, y:g.box.y+p, w:tt.w, h:tt.h)
 
@@ -247,10 +254,10 @@ proc button*(g: Gui, id: int, label: string): bool =
   return g.doLogic(id, r1)
 
 
-proc button*(g: Gui, id: int, label: string, val: var bool): bool =
+proc button*(g: Gui, id: string, val: var bool): bool =
   let p = g.box.padding
 
-  let tt = g.textCache.renderText(label, g.box.x+p, g.box.y+p, g.colText)
+  let tt = g.textCache.renderText(id, g.box.x+p, g.box.y+p, g.colText)
   var r1 = Rect(x:g.box.x, y:g.box.y, w:tt.w+p*2, h:tt.h+p*2)
   var r2 = Rect(x:g.box.x+p, y:g.box.y+p, w:tt.w, h:tt.h)
 
@@ -264,32 +271,27 @@ proc button*(g: Gui, id: int, label: string, val: var bool): bool =
     return true
 
 
-proc select*(g: Gui, id: int, label: string, val: var int, items: seq[string]): bool =
-
-  g.start(PackHor, 0)
+proc select*(g: Gui, id: string, val: var int, items: seq[string], picker: bool = false): bool =
 
   let n = len(items)
   var vals: seq[bool]
   for i in 0..len(items)-1:
     vals.add(i == val)
 
+  g.start(PackHor, 0)
   g.horizontal()
-
   for i in 0..len(items)-1:
-    let r = g.button(i+100, items[i], vals[i])
-    if r:
+    if g.button(items[i], vals[i]):
       val = i
       result = true
-
   g.stop()
 
-
-template select*(g: Gui, id: int, label: string, val: typed): bool =
+template select*(g: Gui, id: string, val: typed, picker: bool = false): bool =
   var names: seq[string]
   for i in low(val[].type)..high(val[].type):
     names.add $(val[].type)(i)
   var val2 = ord(val[])
-  let rv = select(g, id, label, val2, names)
+  let rv = select(g, id, val2, names, picker)
   if rv:
     val[] = (val[].type)(val2)
   rv

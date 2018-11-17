@@ -2,7 +2,9 @@
 import sdl2/sdl
 import widget
 import tables
+import math
 import textcache
+import capbuf
 
 const BLOCKSIZE_MAX* = 1024
 
@@ -23,6 +25,7 @@ type
     w, h: int
     widgets: seq[Widget]
     textCache*: TextCache
+    capBuf*: CapBuf
 
 proc channelColor*(rend: Renderer, ch: int) =
   if ch == 0:
@@ -48,26 +51,31 @@ proc addWidget*(app: App, widget: Widget) =
 
 
 proc handle_audio*(app: App, buf: AudioBuffer) =
+  discard
+
+proc draw*(app: App) =
+
+  discard app.rend.setRenderDrawColor(30, 30, 30, 255)
+  discard app.rend.renderClear
+
+  var buf: AudioBuffer
 
   for w in app.widgets:
     w.w = app.w
     w.h = app.h
     w.draw(app, buf)
-
+  
   app.rend.renderPresent
-  discard setRenderDrawBlendMode(app.rend, BLENDMODE_BLEND);
 
 
 proc run*(app: App): bool =
 
   var e: sdl.Event
+  var ticks = 0
 
   while true:
 
-    discard app.rend.setRenderDrawColor(30, 30, 30, 255)
-    discard app.rend.renderClear
-
-    if sdl.waitEvent(addr e) != 0:
+    while sdl.waitEvent(addr e) != 0:
 
       if e.kind == sdl.Quit:
         quit 0
@@ -101,18 +109,26 @@ proc run*(app: App): bool =
           app.h = e.window.data2
 
       if e.kind == sdl.UserEvent:
-        let len = e.user.code
+        let bytes = e.user.code
+        let count = bytes /% sizeof(cfloat)
         let p = e.user.data1
-        let i = cast[int](e.user.data2)
-        let buf = cast[ptr AudioBuffer](p)[]
-        app.handle_audio buf
+        let buf = cast[ptr array[2048, cfloat]](p)[]
+        app.capBuf.writeInterlaced(buf, count)
         cfree p
+
+      if e.kind == EventKind(ord(sdl.UserEvent)+1):
+        app.draw
+        inc(ticks)
+        if ticks == 100:
+          for adev in app.adevs:
+            pauseAudioDevice(adev, 1)
+
 
 
 {.push stackTrace: off.}
 proc on_audio(userdata: pointer, stream: ptr uint8, len: cint) {.cdecl.} =
   var e = sdl.Event()
-  e.user.kind = USEREVENT
+  e.user.kind = UserEvent
   e.user.code = len
   e.user.data1 = c_malloc(len)
   e.user.data2 = userdata
@@ -120,12 +136,8 @@ proc on_audio(userdata: pointer, stream: ptr uint8, len: cint) {.cdecl.} =
   discard pushEvent(addr e)
 
 proc on_timer(interval: uint32, userdata: pointer): uint32 {.cdecl.} =
-  let len = 1024
   var e = sdl.Event()
-  e.user.kind = USEREVENT
-  e.user.code = len
-  e.user.data1 = c_malloc(len)
-  e.user.data2 = userdata
+  e.user.kind = EventKind(ord(UserEvent)+1)
   discard pushEvent(addr e)
   return interval
 {.pop.}
@@ -142,19 +154,17 @@ proc newApp*(w, h: int): App =
     WindowPosUndefined, WindowPosUndefined,
     app.w, app.h, WINDOW_RESIZABLE)
 
-  app.rend = createRenderer(app.win, -1, sdl.RendererAccelerated)
+  app.rend = createRenderer(app.win, -1, sdl.RendererAccelerated and sdl.RendererPresentVsync)
   app.textCache = newTextCache(app.rend, "font.ttf")
+  app.capBuf = newCapBuf(10 * 1024 * 1024)
 
   discard addTimer(1000 /% 30, on_timer, nil)
 
   let n = sdl.getNumAudioDevices(1)
-  echo n, " audio devices found:"
+
   for i in 1..n:
     closureScope:
       
-      let name = getAudioDeviceName(i, 1)
-      echo " - ", name
-
       var want = AudioSpec(
         freq: 48000,
         format: AUDIO_F32,
