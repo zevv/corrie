@@ -10,8 +10,5 @@ type
 proc newWidgetNull*(): WidgetNull =
   var w = WidgetNull()
 
-method draw(w: WidgetNull, app: App, buf: AudioBuffer) =
-  return
-
 
 # vi: ft=nim sw=2 ts=2

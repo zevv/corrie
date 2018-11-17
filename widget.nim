@@ -1,5 +1,6 @@
 
 import sdl2/sdl
+import capview
 
 type
   
@@ -9,12 +10,17 @@ type
 
   Widget* = ref object of RootObj
     w*, h*: int
+    rend: Renderer
     hasFocus*: bool
 
 method label*(w: Widget): string {.base.} = 
   return ""
 
-method draw*(w: Widget, app: App, buf: AudioBuffer) {.base.} =
+method draw*(w: Widget, rend: Renderer, app: App, cv: CapView) {.base.} =
+  return
+
+method draw*(w: Widget, app: App, cv: CapView) {.base.} =
+  echo "olddraw"
   return
 
 method updateFocus*(w: Widget, x, y: int): bool {.base.} =

@@ -288,12 +288,12 @@ proc select*(g: Gui, id: string, val: var int, items: seq[string], picker: bool 
 
 template select*(g: Gui, id: string, val: typed, picker: bool = false): bool =
   var names: seq[string]
-  for i in low(val[].type)..high(val[].type):
-    names.add $(val[].type)(i)
-  var val2 = ord(val[])
+  for i in low(val.type)..high(val.type):
+    names.add $(val.type)(i)
+  var val2 = ord(val)
   let rv = select(g, id, val2, names, picker)
   if rv:
-    val[] = (val[].type)(val2)
+    val = (val.type)(val2)
   rv
 
 

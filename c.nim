@@ -16,13 +16,13 @@ discard ttf.init()
 
 
 let a = newApp(600, 400)
-let scope = newWidgetScope()
+let scope = newWidgetScope(a)
 let split1 = newWidgetSplit(true)
 let split2 = newWidgetSplit()
 
-split1.addWidget(newWidgetScope())
-split1.addWidget(newWidgetScope())
-split2.addWidget(newWidgetScope())
+split1.addWidget(newWidgetScope(a))
+split1.addWidget(newWidgetScope(a))
+split2.addWidget(newWidgetScope(a))
 split2.addWidget(newWidgetFFT(a))
 
 when true:

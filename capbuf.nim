@@ -11,7 +11,6 @@ type
     size: int
     head: int
     tail: int
-    cursor: int
     channels: seq[CapChannel]
 
 
@@ -41,13 +40,6 @@ proc writeInterlaced*(cb: CapBuf, buf: array[2048, cfloat], count: int) =
       cc.data[cb.head] = buf[n]
       inc(n)
     cb.head = (cb.head+1) mod cb.size
-  cb.cursor = cb.head
-
-proc getCursor*(cb: CapBuf): int =
-  return cb.cursor
-
-proc setCursor*(cb: CapBuf, c: int) =
-  cb.cursor = c
 
 
 proc read*(cb: CapBuf, channel: int, index: int): float =

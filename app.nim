@@ -5,6 +5,7 @@ import tables
 import math
 import textcache
 import capbuf
+import capview
 
 const BLOCKSIZE_MAX* = 1024
 
@@ -25,7 +26,8 @@ type
     w, h: int
     widgets: seq[Widget]
     textCache*: TextCache
-    capBuf*: CapBuf
+    cb*: CapBuf
+    cv*: CapView
 
 proc channelColor*(rend: Renderer, ch: int) =
   if ch == 0:
@@ -33,8 +35,9 @@ proc channelColor*(rend: Renderer, ch: int) =
   else:
     discard rend.setRenderDrawColor(0, 255, 0, 255)
 
-method draw*(w: Widget, app: App, buf: AudioBuffer) {.base.} =
+method draw*(w: Widget, rend: Renderer, app: App, cv: CapView) {.base.} =
   return
+
 
 method handleKey*(w: Widget, key: Keycode, mx, my: int): bool {.base.} =
   return false
@@ -58,12 +61,10 @@ proc draw*(app: App) =
   discard app.rend.setRenderDrawColor(30, 30, 30, 255)
   discard app.rend.renderClear
 
-  var buf: AudioBuffer
-
   for w in app.widgets:
     w.w = app.w
     w.h = app.h
-    w.draw(app, buf)
+    w.draw(app.rend, app, app.cv)
   
   app.rend.renderPresent
 
@@ -113,7 +114,7 @@ proc run*(app: App): bool =
         let count = bytes /% sizeof(cfloat)
         let p = e.user.data1
         let buf = cast[ptr array[2048, cfloat]](p)[]
-        app.capBuf.writeInterlaced(buf, count)
+        app.cb.writeInterlaced(buf, count)
         cfree p
 
       if e.kind == EventKind(ord(sdl.UserEvent)+1):
@@ -156,7 +157,8 @@ proc newApp*(w, h: int): App =
 
   app.rend = createRenderer(app.win, -1, sdl.RendererAccelerated and sdl.RendererPresentVsync)
   app.textCache = newTextCache(app.rend, "font.ttf")
-  app.capBuf = newCapBuf(10 * 1024 * 1024)
+  app.cb = newCapBuf(10 * 1024 * 1024)
+  app.cv = newCapView(app.cb)
 
   discard addTimer(1000 /% 30, on_timer, nil)
 
@@ -176,9 +178,14 @@ proc newApp*(w, h: int): App =
       var got = AudioSpec()
   
       let adev = openAudioDevice(nil, 1, addr want, addr got, 0)
-      pauseAudioDevice(adev, 0)
+      #pauseAudioDevice(adev, 0)
       app.adevs.add(adev)
 
+  for i in 0..4095:
+    var a: array[2048, cfloat]
+    a[0] = cos(float(i) * 0.8)
+    a[1] = cos(float(i) * 0.7)
+    app.cb.writeInterlaced(a, 2)
 
   return app
 

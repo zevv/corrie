@@ -3,6 +3,7 @@ import widget
 import app
 import widget_scope
 import textcache
+import capview
 
 type
 
@@ -57,8 +58,8 @@ method handleKey(w: WidgetSplit, key: Keycode, x, y: int): bool =
           iins = i
         i = i + 1
       if iins != -1:
-        let cnew = Child(widget: newWidgetScope())
-        w.children.insert(cnew, iins)
+        #let cnew = Child(widget: newWidgetScope())
+        #w.children.insert(cnew, iins)
         handled = true
 
     if key == K_x:
@@ -79,7 +80,7 @@ method handleKey(w: WidgetSplit, key: Keycode, x, y: int): bool =
   return handled
 
 
-method draw(w: WidgetSplit, app: App, buf: AudioBuffer) =
+method draw(w: WidgetSplit, rend: Renderer, app: App, cv: CapView) =
 
   let n = len(w.children)
 
@@ -119,7 +120,7 @@ method draw(w: WidgetSplit, app: App, buf: AudioBuffer) =
     discard app.rend.rendersetClipRect(addr rect)
 
     discard app.rend.renderSetViewPort(addr rect)
-    child.widget.draw(app, buf)
+    child.widget.draw(rend, app, cv)
     discard app.rend.renderSetViewPort(nil)
    
     if child.widget.hasFocus:
