@@ -42,6 +42,13 @@ method handleButton*(w: WidgetSplit, x, y: int, state: bool): bool =
       if h: handled = true
   return handled
 
+method handleWheel*(w: WidgetSplit, x, y: int): bool =
+  var handled: bool = false
+  for child in w.children:
+    let h = child.widget.handleWheel(x, y)
+    if h: handled = true
+  return handled
+
 method handleKey(w: WidgetSplit, key: Keycode, x, y: int): bool =
   var handled: bool = false
   for child in w.children:

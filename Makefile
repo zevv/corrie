@@ -34,4 +34,7 @@ corrienim: c
 c: $(wildcard *.nim) Makefile
 	nim c -d:debug --debugger:native c.nim
 
+crel: $(wildcard *.nim) Makefile
+	nim c -d:release -o:crel c.nim
+
 -include $(DEPS)

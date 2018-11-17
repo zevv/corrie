@@ -95,7 +95,11 @@ proc run*(app: App): bool =
       
       if e.kind == sdl.MouseButtonUp:
         for w in app.widgets:
-          discard w.handleButton(e.motion.x, e.motion.y, false)
+          discard w.handleButton(e.button.x, e.button.y, false)
+      
+      if e.kind == sdl.MouseWheel:
+        for w in app.widgets:
+          discard w.handleWheel(e.wheel.x, e.wheel.y)
 
       if e.kind == sdl.WindowEvent:
         if e.window.event == WINDOWEVENT_RESIZED:
@@ -160,27 +164,39 @@ proc newApp*(w, h: int): App =
   for i in 1..n:
     closureScope:
       
-      var want = ref AudioSpec(
+      var want = AudioSpec(
         freq: 48000,
         format: AUDIO_F32,
         channels: 2,
-        samples: 4096,
+        samples: 1024,
         callback: on_audio,
         userdata: cast[pointer](i)
       )
       var got = AudioSpec()
   
       let adev = openAudioDevice(nil, 1, addr want, addr got, 0)
-      #pauseAudioDevice(adev, 0)
+      pauseAudioDevice(adev, 1)
       app.adevs.add(adev)
 
-  for i in 0..4095:
-    var a: array[2048, cfloat]
-    a[0] = cos(float(i) * 0.8) * 0.2
-    a[1] = cos(float(i) * sqrt(float(i)) * 0.1) * 0.25
-    a[0] = a[0] + rand(0.001)
-    a[1] = a[1] + rand(0.001)
-    app.cb.writeInterlaced(a, 2)
+  if true:
+    for i in 0..(1*1024*1024):
+      var a: array[2048, cfloat]
+      a[0] = cos(float(i) * 0.1)  * cos(float(i) * 0.001)
+      a[1] = cos(float(i) * sqrt(float(i)) * 0.1) * 0.25
+
+      var f = 150.0
+      if a[0] > 0:
+         a[0] = 1 - pow(f, -a[0]);
+      else:
+         a[0] = -1 + pow(f, a[0]);
+
+      a[0] = a[0] + cos(float(i) * 0.003)
+      a[0] = a[0] * 0.25 + 0.5
+      a[1] = a[1] - 0.5
+
+      a[0] = a[0] - rand(0.05)
+
+      app.cb.writeInterlaced(a, 2)
 
   return app
 

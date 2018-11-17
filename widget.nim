@@ -32,4 +32,7 @@ method handleMouse*(w: Widget, x, y: int): bool {.base.} =
 method handleButton*(w: Widget, x, y: int, state: bool): bool {.base.} =
   return
 
+method handleWheel*(w: Widget, x, y: int): bool {.base.} =
+  return
+
 # vi: ft=nim sw=2 ts=2
