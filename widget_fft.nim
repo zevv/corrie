@@ -10,8 +10,6 @@ import textcache
 import capbuf
 import capview
 
-const FFTSIZE_MAX = 16384
-
 
 proc abs(v: fftw_complex): cdouble =
   return sqrt(v[0] * v[0] + v[1] * v[1])
@@ -20,10 +18,10 @@ type
 
   WidgetFFT = ref object of Widget
     gui: Gui
-    input: array[FFTSIZE_MAX, cdouble]
-    output: array[FFTSIZE_MAX, fftw_complex]
-    fftSize: int
+    input: seq[cdouble]
+    output: seq[fftw_complex]
     plan: fftw_plan
+    size: int
     db_top, db_range: float
     cursorX: int
     showFFTOpts: bool
@@ -33,23 +31,27 @@ proc rect(x: int): float =
 
 
 
-proc setFFTSize(w: WidgetFFT, s: int) =
-  w.fftSize = s
-  if w.plan != nil:
-    fftw_destroy_plan(w.plan)
-  w.plan = fftw_plan_dft_r2c_1d(w.fftsize, addr(w.input[low(w.input)]),
-             addr(w.output[low(w.output)]), FFTW_ESTIMATE)
+proc setSize(w: WidgetFFT, size: int) =
+
+  if size != w.size:
+    w.size = size
+    if w.plan != nil:
+      fftw_destroy_plan(w.plan)
+
+    w.input.setLen(size)
+    w.output.setLen(size)
+    w.plan = fftw_plan_dft_r2c_1d(size, addr(w.input[low(w.input)]),
+               addr(w.output[low(w.output)]), FFTW_ESTIMATE)
 
 
 proc newWidgetFFT*(app: App): WidgetFFT =
   var w = WidgetFFT()
 
   w.db_top = 0.0
-  w.db_range = -96.0
-  w.fftsize = 1024
+  w.db_range = -120.0
   w.gui = newGui(app.rend, app.textcache)
 
-  w.setFFTSize(w.fftsize)
+  w.setSize(1024)
 
   return w
 
@@ -62,6 +64,7 @@ method draw(w: WidgetFft, rend: Renderer, app: App, cv: CapView) =
   
   let cb = app.cb
   let offset = cv.getCursor()
+
 
   proc db2y(v: float): int =
       return int(-v * float(w.h) / -w.db_Range)
@@ -86,22 +89,20 @@ method draw(w: WidgetFft, rend: Renderer, app: App, cv: CapView) =
   discard setRenderDrawBlendMode(rend, BLENDMODE_ADD);
 
   let winData = cv.win.getData()
+  let size = cv.win.size
+  
+  w.setSize(size)
 
-  let n = min(w.fftsize, BLOCKSIZE_MAX)
-  let scale = 1.0 / float(n/2)
+  let scale = 1.0 / float(size/2)
   for j in 0..1:
-    for i in 0..BLOCKSIZE_MAX-1:
+    for i in 0..size-1:
       var v = cb.read(j, i+offset)
-      #v = cos(float(i) * PI * 0.550) * 0.5 +
-      #    cos(float(i) * PI * 0.555) * 0.5 
-      #v = v + rand(0.00001)
-      #v = if v > 0: -1 else: 1
       w.input[i] = v * scale * winData[i]
 
     fftw_execute(w.plan)
 
-    let n = w.fftsize /% 2 - 1
-    var p: array[FFTSIZE_MAX, sdl.Point]
+    let n = size /% 2 - 1
+    var p = newSeq[sdl.Point](n)
     let scale = float(w.h) / float(n)
     for i in 0..n-1:
       let v = abs(w.output[i])
@@ -132,23 +133,6 @@ method draw(w: WidgetFft, rend: Renderer, app: App, cv: CapView) =
           f1 = f1 + f
     discard setRenderDrawBlendMode(rend, BLENDMODE_BLEND);
 
-  # Gui
-
-  w.gui.start(100, 0)
-  w.gui.start(PackHor)
-  discard w.gui.button("FFT", w.showFFTOpts)
-  w.gui.label("FFT " & $w.fftSize)
-  w.gui.stop()
-
-  if w.showFFTOpts:
-    w.gui.start(PackVer)
-    if w.gui.slider("FFT size", w.fftSize, 128, FFTSIZE_MAX, true):
-      w.fftSize = int(pow(2, floor(log2(float(w.fftSize)))))
-      w.setFFTSize(w.fftSize)
-    w.gui.stop()
-
-  w.gui.stop()
-
 method handleMouse*(w: WidgetFFT, x, y: int): bool =
   w.gui.mouseMove(x, y)
   w.cursorX = x
@@ -165,15 +149,6 @@ method handleKey(w: WidgetFFT, key: Keycode, x, y: int): bool =
   
   if key == K_RIGHTBRACKET:
     discard
-
-  if key == K_s:
-    var s = w.fftsize
-    if s < FFTSIZE_MAX:
-      s = s * 2
-    else:
-      s = 64
-    w.setFFTSize(s)
-    return true
 
 
 # vi: ft=nim sw=2 ts=2

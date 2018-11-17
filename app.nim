@@ -1,5 +1,6 @@
 
 import sdl2/sdl
+import random
 import widget
 import tables
 import math
@@ -7,7 +8,6 @@ import textcache
 import capbuf
 import capview
 
-const BLOCKSIZE_MAX* = 1024
 
 proc c_malloc(size: csize): pointer {.importc: "malloc", header: "<stdlib.h>".}
 proc c_memcpy(dst, src: pointer, len: csize) {.importc: "memcpy", header: "<stdlib.h>".}
@@ -15,10 +15,6 @@ proc c_free(p: pointer) {.importc: "free", header: "<stdlib.h>".}
 
 type
   
-  AudioBuffer* = object
-    size*: int
-    data*: array[BLOCKSIZE_MAX, array[2, cfloat]]
-
   App* = ref object
     win: sdl.Window
     rend*: sdl.Renderer
@@ -52,9 +48,6 @@ proc addWidget*(app: App, widget: Widget) =
   app.widgets.add(widget)
   return
 
-
-proc handle_audio*(app: App, buf: AudioBuffer) =
-  discard
 
 proc draw*(app: App) =
 
@@ -171,7 +164,7 @@ proc newApp*(w, h: int): App =
         freq: 48000,
         format: AUDIO_F32,
         channels: 2,
-        samples: BLOCKSIZE_MAX,
+        samples: 4096,
         callback: on_audio,
         userdata: cast[pointer](i)
       )
@@ -183,8 +176,10 @@ proc newApp*(w, h: int): App =
 
   for i in 0..4095:
     var a: array[2048, cfloat]
-    a[0] = cos(float(i) * 0.8)
-    a[1] = cos(float(i) * 0.7)
+    a[0] = cos(float(i) * 0.8) * 0.2
+    a[1] = cos(float(i) * sqrt(float(i)) * 0.1) * 0.25
+    a[0] = a[0] + rand(0.001)
+    a[1] = a[1] + rand(0.001)
     app.cb.writeInterlaced(a, 2)
 
   return app

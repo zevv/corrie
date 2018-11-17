@@ -50,7 +50,7 @@ type
 proc newGui*(rend: Renderer, textCache: TextCache): Gui =
   let g = Gui(rend: rend, textCache: textCache)
   g.colFg = Color(r: 150, g:120, b: 50, a:255)
-  g.colBg = Color(r:30, g:30, b:40, a:255)
+  g.colBg = Color(r:30, g:30, b:40, a:0)
   g.colItem = Color(r:30, g:50, b:100, a:255)
   g.colItemAct = Color(r:80, g:140, b:140, a:255)
   g.colText = Color(r:255, g:255, b:255, a:255)

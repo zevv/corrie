@@ -1,5 +1,6 @@
 import sdl2/sdl
 import widget
+import math
 import app
 import gui
 import capbuf
@@ -12,6 +13,7 @@ type
     mx: int
     gui: Gui
     showWindowOpts: bool
+    showXformSize: bool
     winType: WindowType
 
 
@@ -45,22 +47,23 @@ method draw(w: WidgetScope, rend: Renderer, app: App, cv: CapView) =
   if true:
     let d = cv.win.getData()
     let l = d.len()
-    var p: array[BLOCKSIZE_MAX, sdl.Point]
+    echo l
+    var p = newSeq[Point](l)
     for i in 0..l-1:
       let v = d[i]
       let y = v * float(w.h)
-      p[i].x = w.w - cint(float(w.w) * float(i) / float(l) / w.hScale)
+      p[i].x = w.w - cint(float(cv.getCursor() - i + l/%2) / w.hScale)
       p[i].y = w.h - cint(y)
 
     discard rend.setRenderDrawColor(0, 0, 255, 255)
-    discard rend.renderDrawLines(addr(p[0]), BLOCKSIZE_MAX)
+    discard rend.renderDrawLines(addr(p[0]), l)
 
   # Scope
 
   let vScale = w.vScale * float(w.h) * 0.5
 
   for j in 0..1:
-    var p: array[BLOCKSIZE_MAX, sdl.Point]
+    var p = newSeq[Point](w.w)
     for x in 0 .. w.w-1:
       let i = float(w.w-x) * w.hScale
       let v = cb.read(j, int(i))
@@ -84,25 +87,42 @@ method draw(w: WidgetScope, rend: Renderer, app: App, cv: CapView) =
 
   # Gui
 
-  w.gui.start(100, 0)
+  let win = cv.win
+
+  w.gui.start(0, 0)
+  w.gui.label($win.typ & " / " & $win.size)
+  
   w.gui.start(PackHor)
   discard w.gui.button("Window", w.showWindowOpts)
-  w.gui.stop()
-
   if w.showWindowOpts:
-    var winTyp = cv.win.typ
-    var winBeta = cv.win.beta
-    w.gui.start(PackVer)
+    var winTyp = win.typ
+    var winBeta = win.beta
     discard w.gui.select("Window", winTyp, true)
     if winTyp == Gaussian or winTyp == Cauchy:
       discard w.gui.slider("beta", winbeta, 0.1, 40.0, true)
-    w.gui.stop()
-    if winTyp != cv.win.typ or winBeta != cv.win.beta:
-      cv.win.typ = winTyp
-      cv.win.beta = winBeta
-      cv.win.update()
+    if winTyp != win.typ or winBeta != win.beta:
+      win.typ = winTyp
+      win.beta = winBeta
+      win.update()
   w.gui.stop()
 
+  w.gui.start(PackHor)
+  discard w.gui.button("Size", w.showXformSize)
+  if w.showXformSize:
+    var size = win.size
+    if w.gui.slider("FFT size", size, 128, 16384, true):
+      size = int(pow(2, floor(log2(float(size)))))
+      win.size = size
+      cv.win.update()
+
+  w.gui.stop()
+
+
+  # Gui
+
+
+
+  w.gui.stop()
 
 method handleMouse*(w: WidgetScope, x, y: int): bool =
   w.mx = x
