@@ -1,6 +1,7 @@
 
 import sdl2/sdl
 import random
+import times
 import widget
 import tables
 import math
@@ -67,9 +68,23 @@ proc run*(app: App): bool =
   var e: sdl.Event
   var ticks = 0
 
+  var tnext = epochTime()
+
   while true:
 
-    while sdl.waitEvent(addr e) != 0:
+    app.draw
+    inc(ticks)
+    if ticks == 100:
+      for adev in app.adevs:
+        pauseAudioDevice(adev, 1)
+
+    var tnow = epochTime()
+    var dt = tnext - tnow
+    if dt > 0:
+      delay(uint32(dt * 1024))
+    t_next = t_next + 1/30.0
+
+    while sdl.pollEvent(addr e) != 0:
 
       if e.kind == sdl.Quit:
         quit 0
@@ -114,12 +129,12 @@ proc run*(app: App): bool =
         app.cb.writeInterlaced(buf, count)
         cfree p
 
-      if e.kind == EventKind(ord(sdl.UserEvent)+1):
-        app.draw
-        inc(ticks)
-        if ticks == 100:
-          for adev in app.adevs:
-            pauseAudioDevice(adev, 1)
+      #if e.kind == EventKind(ord(sdl.UserEvent)+1):
+      #  app.draw
+      #  inc(ticks)
+      #  if ticks == 100:
+      #    for adev in app.adevs:
+      #      pauseAudioDevice(adev, 1)
 
 
 
@@ -141,6 +156,24 @@ proc on_timer(interval: uint32, userdata: pointer): uint32 {.cdecl.} =
 {.pop.}
 
 
+proc loadsample(cb: CapBuf, fname: string) =
+  var spec: AudioSpec
+  var buf: ptr uint8
+  var len: uint32
+  let r = loadWAV(fname, addr spec, addr buf, addr len)
+  echo repr r
+  assert spec.format == AUDIO_S16LSB
+  var a = cast[ByteAddress](buf)
+  var fbuf: array[2048, cfloat]
+  let samples = int(len) /% 4
+  for i in 0..samples:
+    for j in 0..1:
+      let pv = cast[ptr int16](a)
+      a += sizeof(int16)
+      fbuf[j] = cfloat(pv[]) / 32767.0
+    cb.writeInterlaced(fbuf, 2)
+
+
 proc newApp*(w, h: int): App =
 
   let app = App()
@@ -156,8 +189,6 @@ proc newApp*(w, h: int): App =
   app.textCache = newTextCache(app.rend, "font.ttf")
   app.cb = newCapBuf(10 * 1024 * 1024)
   app.cv = newCapView(app.cb)
-
-  discard addTimer(1000 /% 30, on_timer, nil)
 
   let n = sdl.getNumAudioDevices(1)
 
@@ -178,24 +209,29 @@ proc newApp*(w, h: int): App =
       pauseAudioDevice(adev, 1)
       app.adevs.add(adev)
 
+
   if true:
+    loadsample(app.cb, "/tmp/16.wav")
+
+  if false:
     for i in 0..(1*1024*1024):
       var a: array[2048, cfloat]
-      a[0] = cos(float(i) * 0.1)  * cos(float(i) * 0.001)
+      a[0] = cos(float(i) * 0.4) * cos(float(i) * 0.001)
      
-      a[1] = cos(float(i) * 1.0) * 0.2
+      a[1] = cos(float(i) * 0.41) * 0.3
 
-      var f = 0.2
+      var f = 0.8
       if a[0] > 0:
          a[0] =  pow(a[0], f);
       else:
          a[0] = -pow(-a[0], f);
 
-      a[0] = a[0] + cos(float(i) * 0.003) * 0.5
+      a[0] = a[0] + cos(float(i) * 0.003) * 0.2
       a[0] = a[0] * 0.25 + 0.5
       a[1] = a[1] - 0.5
 
-      a[0] = a[0] - rand(0.05)
+      #if rand(1.0) < 0.01:
+      #  a[0] = rand(1.0)
 
       app.cb.writeInterlaced(a, 2)
 

@@ -49,7 +49,7 @@ proc read*(cb: CapBuf, channel: int, index: int): float =
 
   let cc = cb.channels[channel]
   var i = cb.head - index
-  if i < 0:
+  while i < 0:
     i = i + cb.size
   return cc.data[i]
 

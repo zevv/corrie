@@ -1,4 +1,9 @@
 
+when defined(profiling):
+  echo "PROFILING"
+  import nimprof
+  disableProfiling() 
+
 import math
 import sdl2/sdl
 import sdl2/sdl_ttf as ttf

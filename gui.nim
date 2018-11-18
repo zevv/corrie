@@ -214,7 +214,7 @@ proc slider*(g: Gui, id: string, val: var float, vmin, vmax: float, do_log: bool
   g.fillRect(r_knob, g.colFg)
   g.drawTex(r_label, tt.tex)
 
-  g.updatePos(r_slider.w + r_label.w, r_slider.h)
+  g.updatePos(r_slider.w, r_slider.h)
 
   let valp = addr val
 

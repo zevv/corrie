@@ -38,6 +38,6 @@ crel: $(wildcard *.nim) Makefile
 	nim c -d:release --debuginfo -o:crel c.nim
 
 cprof: $(wildcard *.nim) Makefile
-	nim c --profiler:on  --stacktrace:on -o:cprof c.nim
+	nim c -d:profiling --profiler:on  --stacktrace:on -o:cprof c.nim
 
 -include $(DEPS)
