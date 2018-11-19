@@ -50,7 +50,12 @@ proc read*(cb: CapBuf, channel: int, index: int): float =
   var i = cb.head - index
   while i < 0:
     i = i + cb.size
-  return cc.data[i]
+  while i > cb.size:
+    i = i - cb.size
+  try:
+    return cc.data[i]
+  except:
+    echo i, " ", cb.size
 
 
 proc clear(cb: CapBuf) =
