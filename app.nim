@@ -121,13 +121,13 @@ proc run*(app: App): bool =
           app.w = e.window.data1
           app.h = e.window.data2
 
-      if e.kind == sdl.UserEvent:
-        let bytes = e.user.code
-        let count = bytes /% sizeof(cfloat)
-        let p = e.user.data1
-        let buf = cast[ptr array[2048, cfloat]](p)[]
-        app.cb.writeInterlaced(buf, count)
-        cfree p
+      #if e.kind == sdl.UserEvent:
+        #let bytes = e.user.code
+        #let count = bytes /% sizeof(cfloat)
+        #let p = e.user.data1
+        #let buf = cast[ptr array[2048, cfloat]](p)[]
+        #app.cb.writeInterlaced(buf, count)
+        #cfree p
 
       #if e.kind == EventKind(ord(sdl.UserEvent)+1):
       #  app.draw
@@ -161,17 +161,17 @@ proc loadsample(cb: CapBuf, fname: string) =
   var buf: ptr uint8
   var len: uint32
   let r = loadWAV(fname, addr spec, addr buf, addr len)
-  echo repr r
-  assert spec.format == AUDIO_S16LSB
-  var a = cast[ByteAddress](buf)
-  var fbuf: array[2048, cfloat]
-  let samples = int(len) /% 4
-  for i in 0..samples:
-    for j in 0..1:
-      let pv = cast[ptr int16](a)
-      a += sizeof(int16)
-      fbuf[j] = cfloat(pv[]) / 32767.0
-    cb.writeInterlaced(fbuf, 2)
+  if r != nil:
+    assert spec.format == AUDIO_S16LSB
+    var a = cast[ByteAddress](buf)
+    var fbuf = newSeq[cfloat](3)
+    let samples = int(len) /% 4
+    for i in 0..samples:
+      for j in 0..1:
+        let pv = cast[ptr int16](a)
+        a += sizeof(int16)
+        fbuf[j] = cfloat(pv[]) / 32767.0
+      cb.writeInterleaved(fbuf)
 
 
 proc newApp*(w, h: int): App =
@@ -211,16 +211,18 @@ proc newApp*(w, h: int): App =
 
 
   if true:
-    loadsample(app.cb, "/tmp/16.wav")
+    for i in 1..32:
+      loadsample(app.cb, "/tmp/" & $i & ".wav")
 
-  if false:
+  if true:
+    var a = newSeq[cfloat](3)
+
     for i in 0..(1*1024*1024):
-      var a: array[2048, cfloat]
       a[0] = cos(float(i) * 0.4) * cos(float(i) * 0.001)
      
       a[1] = cos(float(i) * 0.41) * 0.3
 
-      var f = 0.8
+      var f = 2.2
       if a[0] > 0:
          a[0] =  pow(a[0], f);
       else:
@@ -233,7 +235,7 @@ proc newApp*(w, h: int): App =
       #if rand(1.0) < 0.01:
       #  a[0] = rand(1.0)
 
-      app.cb.writeInterlaced(a, 2)
+      app.cb.writeInterleaved(a)
 
   return app
 

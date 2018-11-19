@@ -41,7 +41,7 @@ type
     textCache: TextCache
     rend: Renderer
     mx, my, mb: int
-    colFg, colBg, colItem, colItemAct, colText, colHot, colBound: Color
+    colFg, colBg, colItem, colItemAct, colText, colHot, colBound, colBorder: Color
     box: Box
     boxStack: seq[Box]
     renderCmds: seq[RenderCmd]
@@ -56,6 +56,7 @@ proc newGui*(rend: Renderer, textCache: TextCache): Gui =
   g.colText = Color(r:255, g:255, b:255, a:255)
   g.colHot = Color(r:255, g:0, b:0, a:255)
   g.colBound = Color(r:0, g:255, b:0, a:255)
+  g.colBorder = Color(r:100, g:100, b:100, a:255)
   g.debug = false
   return g
 
@@ -100,6 +101,7 @@ proc setBounds(g: Gui, rect: Rect) =
 
 proc drawBg(g: Gui, rect: var Rect, hot: bool) =
   g.fillRect(rect, if hot: g.colItemAct else: g.colItem)
+  g.drawRect(rect, g.colBorder)
   if g.debug: g.drawRect(g.rectHot, g.colHot)
   g.setBounds(rect)
 

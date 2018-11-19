@@ -190,6 +190,7 @@ method draw(w: WidgetScope, rend: Renderer, app: App, cv: CapView) =
         for y in y3..y4-1:
           accum[y] += intensity
 
+      amax = min(amax, 2.1)
       w.intNorm[j] = if amax>0: 255.0/amax else: 0
 
     

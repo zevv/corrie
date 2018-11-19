@@ -1,9 +1,11 @@
 
 
 type
+
+  Sample = cfloat
  
   CapChannel = ref object
-    data: seq[float]
+    data: seq[Sample]
 
   CapBuf* = ref object
     memSize: int
@@ -15,31 +17,28 @@ type
 
 
 proc realloc(cb: CapBuf) =
-  cb.size = cb.memSize /% (cb.channelCount * sizeof(float))
+  cb.size = cb.memSize /% (cb.channelCount * sizeof(Sample))
   cb.head = 0
   cb.tail = 0
   cb.channels.setLen(0)
 
   for i in 0..cb.channelCount-1:
     var cc = CapChannel()
-    cc.data = newSeq[float](cb.size)
+    cc.data = newSeq[Sample](cb.size)
     cb.channels.add(cc)
 
-
-proc writeInterlaced*(cb: CapBuf, buf: array[2048, cfloat], count: int) =
+proc writeInterleaved*(cb: CapBuf, buf: seq[cfloat]) =
 
   if cb.size == 0:
     cb.realloc()
 
   var n = 0
-  let samples = count /% cb.channelCount
-  for i in 0..samples-1:
-    for ch in 0..cb.channelCount-1:
-      let cc = cb.channels[ch]
-      assert(cc != nil)
-      cc.data[cb.head] = buf[n]
-      inc(n)
-    cb.head = (cb.head+1) mod cb.size
+  for ch in 0..cb.channelCount-1:
+    let cc = cb.channels[ch]
+    assert(cc != nil)
+    cc.data[cb.head] = buf[n]
+    inc(n)
+  cb.head = (cb.head+1) mod cb.size
 
 
 proc read*(cb: CapBuf, channel: int, index: int): float =
