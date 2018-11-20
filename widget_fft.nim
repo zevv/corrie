@@ -25,10 +25,11 @@ type
     db_top, db_range: float
     cursorX: int
     showFFTOpts: bool
+    showWindowOpts: bool
+    showXformSize: bool
 
 proc rect(x: int): float =
   return 1.0
-
 
 
 proc setSize(w: WidgetFFT, size: int) =
@@ -48,7 +49,7 @@ proc newWidgetFFT*(app: App): WidgetFFT =
   var w = WidgetFFT()
 
   w.db_top = 0.0
-  w.db_range = -120.0
+  w.db_range = -180.0
   w.gui = newGui(app.rend, app.textcache)
 
   w.setSize(1024)
@@ -133,12 +134,50 @@ method draw(w: WidgetFft, rend: Renderer, app: App, cv: CapView) =
           f1 = f1 + f
     discard setRenderDrawBlendMode(rend, BLENDMODE_BLEND);
 
+
+  # Gui
+  
+  let win = cv.win
+
+  w.gui.start(0, 0)
+  w.gui.start(PackHor)
+  w.gui.label($win.typ & " / " & $win.size)
+  w.gui.stop()
+  
+  w.gui.start(PackHor)
+  discard w.gui.button("Win", w.showWindowOpts)
+  if w.showWindowOpts:
+    var winTyp = win.typ
+    var winBeta = win.beta
+    discard w.gui.select("Window", winTyp, true)
+    if winTyp == Gaussian or winTyp == Cauchy:
+      discard w.gui.slider("beta", winbeta, 0.1, 40.0, true)
+    if winTyp != win.typ or winBeta != win.beta:
+      win.typ = winTyp
+      win.beta = winBeta
+      win.update()
+  w.gui.stop()
+
+  w.gui.start(PackHor)
+  discard w.gui.button("Size", w.showXformSize)
+  if w.showXformSize:
+    var size = win.size
+    if w.gui.slider("FFT size", size, 128, 16384, true):
+      size = int(pow(2, floor(log2(float(size)))))
+      win.size = size
+      cv.win.update()
+
+  w.gui.stop()
+
+  w.gui.stop()
+
 method handleMouse*(w: WidgetFFT, x, y: int): bool =
   w.gui.mouseMove(x, y)
-  w.cursorX = x
+  if not w.gui.isActive():
+    w.cursorX = x
   return true
 
-method handleButton*(w: WidgetFFT, x, y: int, state: bool): bool =
+method handleButton*(w: WidgetFFT, x, y: int, button: int, state: bool): bool =
   w.gui.mouseButton(x, y, if state: 1 else: 0)
   return true
 

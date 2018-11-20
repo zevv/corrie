@@ -106,11 +106,11 @@ proc run*(app: App): bool =
 
       if e.kind == sdl.MouseButtonDown:
         for w in app.widgets:
-          discard w.handleButton(e.motion.x, e.motion.y, true)
+          discard w.handleButton(e.button.x, e.button.y, e.button.button, true)
       
       if e.kind == sdl.MouseButtonUp:
         for w in app.widgets:
-          discard w.handleButton(e.button.x, e.button.y, false)
+          discard w.handleButton(e.button.x, e.button.y, e.button.button, false)
       
       if e.kind == sdl.MouseWheel:
         for w in app.widgets:
@@ -129,12 +129,10 @@ proc run*(app: App): bool =
         #app.cb.writeInterlaced(buf, count)
         #cfree p
 
-      #if e.kind == EventKind(ord(sdl.UserEvent)+1):
-      #  app.draw
-      #  inc(ticks)
-      #  if ticks == 100:
-      #    for adev in app.adevs:
-      #      pauseAudioDevice(adev, 1)
+      if e.kind == EventKind(ord(sdl.UserEvent)+1):
+        app.draw
+        var fbuf = newSeq[cfloat](2)
+        app.cb.writeInterleaved(fbuf)
 
 
 
@@ -165,12 +163,12 @@ proc loadsample(cb: CapBuf, fname: string) =
     assert spec.format == AUDIO_S16LSB
     var a = cast[ByteAddress](buf)
     var fbuf = newSeq[cfloat](3)
-    let samples = int(len) /% 4
+    let samples = int(len) /% 2
     for i in 0..samples:
-      for j in 0..1:
-        let pv = cast[ptr int16](a)
-        a += sizeof(int16)
-        fbuf[j] = cfloat(pv[]) / 32767.0
+      let pv = cast[ptr int16](a)
+      a += sizeof(int16)
+      fbuf[1] = cfloat(pv[]) / 32767.0
+      fbuf[0] = fbuf[1]
       cb.writeInterleaved(fbuf)
 
 
@@ -210,6 +208,8 @@ proc newApp*(w, h: int): App =
       app.adevs.add(adev)
 
 
+  discard addTimer(100, on_timer, nil)
+
   if true:
     for i in 1..32:
       loadsample(app.cb, "/tmp/" & $i & ".wav")
@@ -217,10 +217,10 @@ proc newApp*(w, h: int): App =
   if true:
     var a = newSeq[cfloat](3)
 
-    for i in 0..(1*1024*1024):
+    for i in 0..(10*1024):
       a[0] = cos(float(i) * 0.4) * cos(float(i) * 0.001)
      
-      a[1] = cos(float(i) * 0.41) * 0.3
+      a[1] = cos(float(i) * PI * 0.1001) * 0.3 - 0.5
 
       var f = 2.2
       if a[0] > 0:
@@ -230,10 +230,9 @@ proc newApp*(w, h: int): App =
 
       a[0] = a[0] + cos(float(i) * 0.003) * 0.2
       a[0] = a[0] * 0.25 + 0.5
-      a[1] = a[1] - 0.5
 
-      #if rand(1.0) < 0.01:
-      #  a[0] = rand(1.0)
+      if rand(1.0) < 0.01:
+        a[0] = rand(1.0)
 
       app.cb.writeInterleaved(a)
 

@@ -34,11 +34,11 @@ method handleMouse*(w: WidgetSplit, x, y: int): bool =
       if h: handled = true
   return handled
 
-method handleButton*(w: WidgetSplit, x, y: int, state: bool): bool =
+method handleButton*(w: WidgetSplit, x, y: int, button: int, state: bool): bool =
   var handled: bool = false
   for child in w.children:
     if containsXY(child, x, y):
-      let h = child.widget.handleButton(x - child.x, y - child.y, state)
+      let h = child.widget.handleButton(x - child.x, y - child.y, button, state)
       if h: handled = true
   return handled
 

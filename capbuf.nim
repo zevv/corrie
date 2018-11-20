@@ -36,12 +36,15 @@ proc writeInterleaved*(cb: CapBuf, buf: seq[cfloat]) =
   for ch in 0..cb.channelCount-1:
     let cc = cb.channels[ch]
     assert(cc != nil)
-    cc.data[cb.head] = buf[n]
+    cc.data[cb.head] = Sample(buf[n])
     inc(n)
   cb.head = (cb.head+1) mod cb.size
 
 
 proc read*(cb: CapBuf, channel: int, index: int): float =
+
+  if index < 0:
+    return 0.0
 
   if cb.size == 0:
     cb.realloc()
@@ -53,7 +56,7 @@ proc read*(cb: CapBuf, channel: int, index: int): float =
   while i > cb.size:
     i = i - cb.size
   try:
-    return cc.data[i]
+    return float(cc.data[i])
   except:
     echo i, " ", cb.size
 

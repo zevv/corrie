@@ -17,33 +17,55 @@ type
     posTo: int
     mx: int
     gui: Gui
-    showWindowOpts: bool
-    showXformSize: bool
     winType: WindowType
     tex: Texture
     texw, texh: int
     algo: int
     intNorm: float
-    amax: array[4, float]
     intensity: float
+    peakHilite: bool
+    dragging: int
+    dragX, dragY: int
+
 
 
 proc newWidgetScope*(app: App): WidgetScope =
   let w = WidgetScope(
     vScale: 1.0,
     algo: 2,
-    intensity: 1.0,
+    intensity: 50,
+    peakHilite: false,
     posFrom: 0,
     posTo: 100000,
   )
   w.gui = newGui(app.rend, app.textcache)
   return w
 
+  
+proc zoom(w: WidgetScope, f: float) =
+  var a = w.mx / w.w
+  let n = float(w.posTo - w.posFrom) * f
+  w.posFrom += int(n * (1.0-a))
+  w.posTo -= int(n * a)
+
+
+proc pan(w: WidgetScope, f: float) = 
+  let dx = int(float(w.posTo - w.posFrom) * f)
+  w.posFrom += dx
+  w.posTo += dx
+
 
 var accum: array[4096, array[4096, uint16]]
 
 method draw(w: WidgetScope, rend: Renderer, app: App, cv: CapView) =
 
+  if w.dragging == 1:
+    var dx = w.mx - w.dragX
+    w.pan(dx / 10000)
+  
+  if w.dragging == 3:
+    var dx = w.mx - w.dragX
+    w.zoom(dx / 1000)
 
   when defined(profiling):
     enableProfiling()
@@ -80,12 +102,12 @@ method draw(w: WidgetScope, rend: Renderer, app: App, cv: CapView) =
 
   case w.algo
 
-
-  of 2:
+  of 1:
     
     var accum: seq[float]
     accum.setLen(w.h)
     var amax = 0.0
+    var acnt = 0
 
     usetex = true
     for j in 0..1:
@@ -101,16 +123,20 @@ method draw(w: WidgetScope, rend: Renderer, app: App, cv: CapView) =
         
         let x = w.w - w.w * (i - w.posFrom) /% (w.posTo - w.posFrom)
         if x != px:
-          px = x
+          if w.peakHilite:
+            accum[ymin] += 1.0
+            accum[ymax] += 1.0
           for y in ymin..ymax:
             accum[y] = sqrt(accum[y])
-            amax = max(amax, accum[y])
+            amax += accum[y]
+            acnt += 1
             var c = pixptr(x, y)
-            var pp = min(int(accum[y] * w.intNorm * w.intensity), 255)
+            var pp = min(int(accum[y] * w.intNorm), 255)
             if j == 0:
               c[] = c[] + uint32(int(pp) * 0x01000100)
             else:
               c[] = c[] + uint32(int(pp) * 0x00010000)
+          px = x
 
           zeroMem(accum[0].addr, len(accum) * sizeof(accum[0]))
           ymin = w.h
@@ -119,7 +145,7 @@ method draw(w: WidgetScope, rend: Renderer, app: App, cv: CapView) =
         var y3 = min(y1, y2)
         var y4 = max(y1, y2)
         let dy = y4 - y3 + 1
-        let intensity = 1.0 / float(dy)
+        let v = 1.0 / float(dy)
         y3 = clamp(y3, 0, w.h-1)
         y4 = clamp(y4, 0, w.h-1)
         ymin = min(ymin, y3)
@@ -127,10 +153,66 @@ method draw(w: WidgetScope, rend: Renderer, app: App, cv: CapView) =
         y4 = max(y3+1, y4)
         
         for y in y3..y4-1:
-          accum[y] += intensity
+          accum[y] += v
 
-    amax = min(amax, 3.0)
-    w.intNorm = if amax>0: 255.0/amax else: 0
+    amax = amax / float(acnt)
+    w.intNorm = if amax>0: (w.intensity / 50.0 * 128.0)/amax else: 0
+
+  of 2:
+    
+    var accum: seq[float]
+    accum.setLen(w.h)
+    var amax = 0.0
+    var acnt = 0
+
+    usetex = true
+    for j in 0..1:
+      var ymin = w.h
+      var ymax = 0
+      var y1 = 0
+      var y2 = 0
+      var px = 0
+
+      for i in w.posFrom .. w.posTo:
+        y1 = y2
+        y2 = int(cb.read(j, i) * vScale + yc)
+        
+        let x = w.w - w.w * (i - w.posFrom) /% (w.posTo - w.posFrom)
+        if x != px:
+          if w.peakHilite:
+            accum[ymin] += 1.0
+            accum[ymax] += 1.0
+          for y in ymin..ymax:
+            accum[y] = sqrt(accum[y])
+            amax += accum[y]
+            acnt += 1
+            var c = pixptr(x, y)
+            var pp = min(int(accum[y] * w.intNorm), 255)
+            if j == 0:
+              c[] = c[] + uint32(int(pp) * 0x01000100)
+            else:
+              c[] = c[] + uint32(int(pp) * 0x00010000)
+          px = x
+
+          zeroMem(accum[0].addr, len(accum) * sizeof(accum[0]))
+          ymin = w.h
+          ymax = 0
+
+        var y3 = min(y1, y2)
+        var y4 = max(y1, y2)
+        let dy = y4 - y3 + 1
+        let v = 1.0 / float(dy)
+        y3 = clamp(y3, 0, w.h-1)
+        y4 = clamp(y4, 0, w.h-1)
+        ymin = min(ymin, y3)
+        ymax = max(ymax, y4)
+        y4 = max(y3+1, y4)
+        
+        for y in y3..y4-1:
+          accum[y] += v
+
+    amax = amax / float(acnt)
+    w.intNorm = if amax>0: (w.intensity / 50.0 * 128.0)/amax else: 0
 
   else:
     discard
@@ -159,14 +241,15 @@ method draw(w: WidgetScope, rend: Renderer, app: App, cv: CapView) =
   
   # Window
 
-  when false:
+  when true:
+    let icursor = cv.getCursor()
     let d = cv.win.getData()
     let l = d.len()
     var p = newSeq[Point](l)
     for i in 0..l-1:
       let v = d[i]
       let y = v * float(w.h)
-      p[i].x = w.w - cint(float(cv.getCursor() - i + l/%2 - w.pos) / w.hScale)
+      p[i].x = w.w - w.w * (icursor + i - w.posFrom) /% (w.posTo - w.posFrom)
       p[i].y = w.h - cint(y)
 
     discard setRenderDrawBlendMode(rend, BLENDMODE_ADD);
@@ -182,34 +265,9 @@ method draw(w: WidgetScope, rend: Renderer, app: App, cv: CapView) =
   w.gui.start(0, 0)
   w.gui.start(PackHor)
   w.gui.label($win.typ & " / " & $win.size)
-  discard w.gui.slider("int", w.intensity, 0.1, 10.0, true)
+  discard w.gui.slider("int", w.intensity, 1, 100.0)
+  discard w.gui.button("peak", w.peakHilite)
   w.gui.stop()
-  
-  w.gui.start(PackHor)
-  discard w.gui.button("Window", w.showWindowOpts)
-  if w.showWindowOpts:
-    var winTyp = win.typ
-    var winBeta = win.beta
-    discard w.gui.select("Window", winTyp, true)
-    if winTyp == Gaussian or winTyp == Cauchy:
-      discard w.gui.slider("beta", winbeta, 0.1, 40.0, true)
-    if winTyp != win.typ or winBeta != win.beta:
-      win.typ = winTyp
-      win.beta = winBeta
-      win.update()
-  w.gui.stop()
-
-  w.gui.start(PackHor)
-  discard w.gui.button("Size", w.showXformSize)
-  if w.showXformSize:
-    var size = win.size
-    if w.gui.slider("FFT size", size, 128, 16384, true):
-      size = int(pow(2, floor(log2(float(size)))))
-      win.size = size
-      cv.win.update()
-
-  w.gui.stop()
-
   w.gui.stop()
 
   when defined(profiling):
@@ -217,26 +275,28 @@ method draw(w: WidgetScope, rend: Renderer, app: App, cv: CapView) =
 
 
 method handleMouse*(w: WidgetScope, x, y: int): bool =
-  w.mx = x
   w.gui.mouseMove(x, y)
+  if not w.gui.isActive:
+    w.mx = x
   return true
 
 
-method handleButton*(w: WidgetScope, x, y: int, state: bool): bool =
+method handleButton*(w: WidgetScope, x, y: int, button: int, state: bool): bool =
   w.gui.mouseButton(x, y, if state: 1 else: 0)
+
+  if state:
+    w.dragging = button
+    w.dragX = x
+    w.dragY = y
+  else:
+    w.dragging = 0
   return true
 
 
 method handleWheel*(w: WidgetScope, x, y: int): bool =
   
   let shift = (ord(getModState()) and ord(KMOD_LSHIFT)) == ord(KMOD_LSHIFT)
-  let dx = (w.posTo - w.posFrom) /% 20
 
-  proc zoom(f: float) =
-    var a = w.mx / w.w
-    let n = float(w.posTo - w.posFrom) * f
-    w.posFrom += int(n * (1.0-a))
-    w.posTo -= int(n * a)
 
   if y == 1:
     if shift:
@@ -250,17 +310,15 @@ method handleWheel*(w: WidgetScope, x, y: int): bool =
       discard
   if x == 1:
     if shift:
-      zoom(-1/10.0)
+      w.zoom(-1/10.0)
     else:
-      w.posFrom += dx
-      w.posTo += dx
+      w.pan(-1/20.0)
   if x == -1:
     if shift:
-      zoom(1/10.0)
+      w.zoom(1/10.0)
       discard
     else:
-      w.posFrom -= dx
-      w.posTo -= dx
+      w.pan(1/20.0)
 
 method handleKey(w: WidgetScope, key: Keycode, x, y: int): bool =
   

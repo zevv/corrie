@@ -60,6 +60,9 @@ proc newGui*(rend: Renderer, textCache: TextCache): Gui =
   g.debug = false
   return g
 
+proc isActive*(g: Gui): bool =
+  return g.id_active != ""
+
 proc updatePos(g: Gui, dx, dy: int) =
   if g.box.packDir == PackHor:
     g.box.x = g.box.x + dx + g.box.margin

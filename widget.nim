@@ -29,7 +29,7 @@ method updateFocus*(w: Widget, x, y: int): bool {.base.} =
 method handleMouse*(w: Widget, x, y: int): bool {.base.} =
   return
 
-method handleButton*(w: Widget, x, y: int, state: bool): bool {.base.} =
+method handleButton*(w: Widget, x, y: int, button: int, state: bool): bool {.base.} =
   return
 
 method handleWheel*(w: Widget, x, y: int): bool {.base.} =

@@ -45,6 +45,8 @@ proc update*(w: Window) =
       of Rectangle:
         v = 1.0
     w.data[x] = v
+  w.data[w.data.low()] = 0.0
+  w.data[w.data.high()] = 0.0
 
 
 proc getData*(w: Window): seq[float] =
@@ -54,7 +56,7 @@ proc getData*(w: Window): seq[float] =
 proc newWindow(): Window = 
   let w = Window(
     typ: Blackman,
-    size: 512,
+    size: 4096,
     beta: 3.0,
   )
   w.update()
