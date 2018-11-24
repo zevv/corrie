@@ -36,7 +36,7 @@ proc newWidgetScope*(app: App): WidgetScope =
     intensity: 50,
     peakHilite: false,
     posFrom: 0,
-    posTo: 100000,
+    posTo: 1000*1024,
   )
   w.gui = newGui(app.rend, app.textcache)
   return w
@@ -87,18 +87,22 @@ method draw(w: WidgetScope, rend: Renderer, app: App, cv: CapView) =
     if w.tex != nil:
       destroyTexture(w.tex)
     w.tex = createTexture(rend, PIXELFORMAT_ARGB32, TEXTUREACCESS_STREAMING, w.w, w.h)
+    w.texw = w.w
+    w.texh = w.h
     assert(w.tex != nil)
   
   var rect = Rect(x:0, y:0, w:w.w, h:w.h)
   var texData: pointer
   var texPitch: cint
   let rv = lockTexture(w.tex, addr rect, addr texData, addr texPitch)
+  zeroMem(texData, texPitch * w.texh)
 
   proc pixPtr(x, y: int): ptr uint32 =
     let texDataAddr = cast[ByteAddress](texData)
     return cast[ptr uint32](texDataAddr + texPitch * y + sizeof(uint32) * x)
 
   var usetex = false
+
 
   case w.algo
 
@@ -216,6 +220,7 @@ method draw(w: WidgetScope, rend: Renderer, app: App, cv: CapView) =
 
   else:
     discard
+  
   
   if usetex:
     unlockTexture(w.tex)

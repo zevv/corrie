@@ -55,12 +55,17 @@ proc draw*(app: App) =
   discard app.rend.setRenderDrawColor(30, 30, 30, 255)
   discard app.rend.renderClear
 
+  let t1 = epochTime()
+
   for w in app.widgets:
     w.w = app.w
     w.h = app.h
     w.draw(app.rend, app, app.cv)
   
   app.rend.renderPresent
+
+  let t2 = epochTime()
+  echo (t2-t1) * 1000
 
 
 proc run*(app: App): bool =
@@ -69,22 +74,16 @@ proc run*(app: App): bool =
   var ticks = 0
 
   var tnext = epochTime()
+  var redraw = true
 
   while true:
 
-    app.draw
-    inc(ticks)
-    if ticks == 100:
-      for adev in app.adevs:
-        pauseAudioDevice(adev, 1)
 
-    var tnow = epochTime()
-    var dt = tnext - tnow
-    if dt > 0:
-      delay(uint32(dt * 1024))
-    t_next = t_next + 1/30.0
 
-    while sdl.pollEvent(addr e) != 0:
+    if sdl.pollEvent(addr e) != 0:
+
+      if e.kind !=  EventKind(ord(sdl.UserEvent)+1):
+        redraw = true
 
       if e.kind == sdl.Quit:
         quit 0
@@ -130,9 +129,11 @@ proc run*(app: App): bool =
         #cfree p
 
       if e.kind == EventKind(ord(sdl.UserEvent)+1):
-        app.draw
-        var fbuf = newSeq[cfloat](2)
-        app.cb.writeInterleaved(fbuf)
+        if redraw:
+          app.draw()
+          redraw = false
+        #var fbuf = newSeq[cfloat](2)
+        #app.cb.writeInterleaved(fbuf)
 
 
 
@@ -208,11 +209,11 @@ proc newApp*(w, h: int): App =
       app.adevs.add(adev)
 
 
-  discard addTimer(100, on_timer, nil)
+  discard addTimer(30, on_timer, nil)
 
   if true:
     for i in 1..32:
-      loadsample(app.cb, "/tmp/" & $i & ".wav")
+      loadsample(app.cb, "wav/" & $i & ".wav")
 
   if true:
     var a = newSeq[cfloat](3)
@@ -231,7 +232,7 @@ proc newApp*(w, h: int): App =
       a[0] = a[0] + cos(float(i) * 0.003) * 0.2
       a[0] = a[0] * 0.25 + 0.5
 
-      if rand(1.0) < 0.01:
+      if rand(1.0) < 0.0005:
         a[0] = rand(1.0)
 
       app.cb.writeInterleaved(a)

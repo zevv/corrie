@@ -14,6 +14,7 @@ import widget_null
 import widget_scope
 import widget_split
 import widget_fft
+import widget_waterfall
 import app
 
 discard sdl.init(sdl.InitVideo or sdl.InitAudio)
@@ -21,13 +22,9 @@ discard ttf.init()
 
 
 let a = newApp(600, 400)
-let scope = newWidgetScope(a)
-let split1 = newWidgetSplit(true)
 let split2 = newWidgetSplit()
-
-split1.addWidget(newWidgetScope(a))
-split1.addWidget(newWidgetScope(a))
 split2.addWidget(newWidgetScope(a))
+split2.addWidget(newWidgetWaterfall(a))
 split2.addWidget(newWidgetFFT(a))
 
 when true:

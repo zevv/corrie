@@ -56,7 +56,7 @@ proc getData*(w: Window): seq[float] =
 proc newWindow(): Window = 
   let w = Window(
     typ: Blackman,
-    size: 4096,
+    size: 1024,
     beta: 3.0,
   )
   w.update()
